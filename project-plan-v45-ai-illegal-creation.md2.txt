@@ -1,0 +1,182 @@
+# CreAIlity — Project Audit & Roadmap (v45)
+
+## 1. WHAT EXISTS (Fully Functional)
+
+### Core Builder Workspace — Production Quality
+- React 19 + TypeScript + TailwindCSS v3 + Vite 8 SPA at `crealityapp.com`
+- Auth: Supabase email/password with AuthGuard on `/workspace`, `/settings`, `/admin`
+- AI engine (`ai-api.ts`): 5 models (GPT-4o, Claude 3.5 Sonnet, Gemini 2.0 Flash, DeepSeek V3, Grok 3), 3 build modes (Web App, React App, Browser Extension), direct client-side API calls using user's own API keys stored in localStorage
+- Preview: sandboxed iframe via blob URL + Babel standalone bundler for React multi-file projects
+- Persistence: localStorage (per-user scoped) + Supabase cloud sync (2s debounced push/pull with merge)
+- Version history: snapshot on every build/save, restore/delete any version
+- Import: GitHub repo (recursive tree fetch + batched file content), ZIP upload (drag-drop, JSZip extraction)
+- Deploy: Vercel REST API + Netlify REST API using user's own tokens
+- Full set of pages: Home, Features, Pricing, Docs, Contact, Terms, Privacy, Auth, Workspace, Settings, Admin, Preview
+
+### Supabase Backend
+- 4 tables: `projects`, `project_versions`, `messages`, `conversations` (latter two exist but unused in code)
+- 5 edge functions: `stripe-setup`, `stripe-webhook`, `stripe-worker`, `AI Proxy`, `Site5 Deploy` (all exist on Supabase but NOT integrated with frontend)
+- Auth fully wired, cloud sync fully wired
+
+### Styling System
+- OKLCH-based dynamic palette: 5 color roles (background, accent, primary, secondary, foreground) × 11 steps each
+- Typography: Inter (body/label) + JetBrains Mono (code) from Google Fonts
+- Dark mode support via `.dark` class CSS variable overrides
+
+## 2. WHAT'S BROKEN / MISSING (Prioritized)
+
+### CRITICAL — Security
+- **RLS NOT ENABLED** on any of the 4 tables. Any authenticated user can technically query all rows. Apply immediately:
+  - `CREATE POLICY "user_access" ON projects FOR ALL USING (auth.uid() = user_id);` (repeat for all 4 tables)
+  - Admin bypass: `CREATE POLICY "admin_access" ON projects FOR ALL USING (is_admin());`
+  - 15-minute fix, closes real vulnerability
+
+### CRITICAL — Monetization (Zero Revenue)
+- Pricing page is static HTML. "Start Pro" / "Start Team" buttons go to `/workspace` — no Stripe checkout
+- `@stripe/react-stripe-js` and `@stripe/stripe-js` already in package.json but never imported
+- `stripe-worker` edge function exists on Supabase — needs to be read, understood, wired to pricing page
+- No plan enforcement: Free users get unlimited everything (all 5 models, unlimited projects, unlimited builds)
+- No subscription tracking, no build counter, no gating anywhere
+
+### HIGH — Mock/Fake Content (20 items)
+All of these appear real to visitors but are static/fabricated: pricing CTAs, plan feature lists, stats numbers ("50k+ apps built"), 4 testimonials, 6 showcase apps, footer social links (all `href="#"`), navbar "Sign in" button (`href="#"`), FAQ team collaboration claim, integrations list (Stripe/Shopify/Cloudflare not actually integrated), settings "Plan" badge always shows "Free"
+
+### HIGH — Publishing (User's Top Priority)
+- Current preview uses blob URLs — die on page refresh. No persistent, shareable preview URL
+- Cloudflare Sandboxes planned but not started (domain `crealityapp.com` is on Cloudflare DNS, wildcard record exists)
+- Custom domain feature listed as Pro perk but zero implementation
+
+### MEDIUM — Memory & Persistence
+- Only last 10 conversation turns kept in AI context. Full history not stored
+- No session resumption — every workspace open is a fresh start
+- `conversations` and `messages` Supabase tables exist but never used
+
+### MEDIUM — Admin Dashboard (30% Complete)
+- Only 3 of ~8 needed tabs exist: Overview (4 stat cards), Users (table w/ search), Projects (table w/ search)
+- Missing: Deployments, Edge Functions, Audit Log, System Settings, Billing Management, Analytics, User Detail, Project Detail
+
+### MEDIUM — Auth Polish
+- No email verification flow, no "forgot password" / password reset, no "resend verification" button
+
+### MEDIUM — Build Reliability
+- No build queue (spam clicks = simultaneous API calls), no rate limiting, no plan-based limits
+- Raw API errors shown to users (no friendly messages), no auto-retry, no offline detection
+
+### LOW — Missing Features
+- Team collaboration (listed as Team plan feature — zero code exists)
+- Browser extension .zip packaging for Chrome loading
+- SEO: no structured data, sitemap, robots.txt, Open Graph tags, semantic HTML audit needed
+- project_plan.md was completely outdated (this document replaces it)
+
+## 3. BUILD ORDER (What To Do Next)
+
+### Phase 1: Stripe + Plan Enforcement (~1-2 weeks)
+1. Read `stripe-worker` edge function from Supabase to understand its API
+2. Wire Stripe checkout to pricing page (import already-installed packages, call edge function, redirect)
+3. Build `/payment/success` and `/payment/cancel` pages
+4. Set up `stripe-webhook` to handle subscription lifecycle (create/update/cancel → store in new `subscriptions` table)
+5. Enforce plans: Free = 3 projects, 50 builds/mo, GPT-4o only, 5 versions/project. Pro = unlimited. Team = Pro + team features
+6. Add build counter, upgrade modals when limits hit, "Builds remaining" indicator
+
+### Phase 2: Cloudflare Publishing (~1-2 weeks)
+1. Implement Cloudflare Sandboxes API — create sandbox per project, deploy files on build, get persistent URL
+2. Deploy Cloudflare Worker for `*.crealityapp.com` routing (parse subdomain → lookup sandbox → proxy)
+3. Custom domain flow for Pro/Team: CNAME verification, SSL provisioning, domain management UI
+4. Keep Vercel/Netlify as alternatives, add Cloudflare as primary/recommended
+
+### Phase 3: Memory & Persistence (~1 week)
+1. Wire `conversations` and `messages` tables — store full history, load on project open
+2. Session resumption: "Continue where you left off" modal with last-message preview
+3. Memory summary injection: compress old messages into auto-generated project context summary
+4. Memory management UI: view/delete/export/search conversation history
+
+### Phase 4: Admin + Security (~1 week)
+1. Apply RLS policies on all 4 tables (DO THIS FIRST — 15 min)
+2. Complete admin dashboard: all missing tabs + user detail + project detail
+3. Build queue: sequential builds, plan-based limits, usage tracking
+4. Error recovery: auto-retry with backoff, user-friendly error messages, offline detection
+
+### Phase 5: Team (~1-2 weeks)
+1. `teams` + `team_members` tables, team creation flow, email invitations
+2. Role-based permissions (owner/admin/editor/viewer), shared workspace
+3. Real-time presence indicators, team switching UI
+
+### Phase 6: Polish (~1 week)
+1. Replace 20 mock/fake items with real data or "Coming soon" labels
+2. Fix dead links (navbar Sign in → `/auth`, footer social → real URLs)
+3. Auth polish: email verification, password reset flow
+4. Extension packaging: .zip download with correct structure + Chrome loading instructions
+5. SEO: Schema.org JSON-LD, OG/Twitter tags, sitemap, robots.txt, semantic HTML cleanup
+
+## 4. TECHNICAL ARCHITECTURE
+
+```
+Frontend: React 19 + TypeScript + TailwindCSS v3 + Vite 8
+Auth: Supabase Auth (email/password) → AuthGuard wraps protected routes
+Database: Supabase PostgreSQL (4 tables, RLS NOT enabled)
+AI: 5 providers, client-side calls, user API keys in localStorage
+Storage: localStorage + Supabase cloud sync (per-user isolation)
+Deploy: Vercel/Netlify REST APIs (working) + Cloudflare Sandboxes (planned)
+Payments: Stripe (edge functions exist, frontend NOT wired)
+Hosting: Readdy.ai → publish.readdy.site → Cloudflare DNS → crealityapp.com
+```
+
+### Key Files (Read These First)
+| File | Role | ~Lines |
+|---|---|---|
+| `src/utils/ai-api.ts` | AI engine: system prompts, API calls, response parsing | 600 |
+| `src/pages/workspace/page.tsx` | Workspace orchestrator | 200 |
+| `src/pages/workspace/components/ChatPanel.tsx` | Chat UI + build trigger | 450 |
+| `src/utils/projects-store.ts` | Project CRUD + localStorage persistence | 350 |
+| `src/utils/cloud-sync.ts` | Supabase sync (push/pull/merge) | 180 |
+| `src/pages/workspace/components/PreviewPanel.tsx` | Iframe preview + code editor | 300 |
+| `src/pages/workspace/components/Sidebar.tsx` | Project list, files, versions | 350 |
+| `src/pages/workspace/components/TopBar.tsx` | Deploy modal, rename, user menu | 400 |
+| `src/utils/sandbox-bundler.ts` | Multi-file React → single HTML bundler | 200 |
+| `src/hooks/use-auth.ts` | Auth state + sandbox isolation + sync triggers | 200 |
+
+### Database Schema (Current)
+- `projects`: id, user_id, name, generated_code, conversation_history (JSONB), imported_files (JSONB), created_at, updated_at, preview_slug, custom_domain
+- `project_versions`: id, project_id, user_id, code, label, timestamp, prompt
+- `messages`: exists, schema unknown, NOT used in code
+- `conversations`: exists, schema unknown, NOT used in code
+
+### New Tables Needed
+- `subscriptions`: stripe_customer_id, stripe_subscription_id, plan_tier, status, current_period_end
+- `teams`: name, owner_id, plan_tier
+- `team_members`: team_id, user_id, role
+- `audit_log`: user_id, action, details (JSONB), created_at
+- `build_metrics`: user_id, project_id, model, build_mode, success, duration_ms
+
+### Edge Functions (Supabase — All Exist, None Integrated)
+- `stripe-worker`: Creates Stripe Checkout Sessions (NEEDED for Phase 1)
+- `stripe-webhook`: Handles Stripe events (NEEDED for Phase 1)
+- `stripe-setup`: Initial Stripe configuration
+- `AI Proxy`: Server-side AI proxy (not currently used — calls go direct)
+- `Site5 Deploy`: Legacy deployment (likely deprecated)
+
+### Environment Variables
+```
+VITE_PUBLIC_SUPABASE_URL          # Supabase project URL
+VITE_PUBLIC_SUPABASE_ANON_KEY     # Supabase anon key
+__BASE_PATH__                     # Vite-injected routing basename
+__IS_PREVIEW__                    # Vite-injected preview flag
+__READDY_PROJECT_ID__             # Vite-injected Readdy project ID
+```
+
+### Style System Rules
+- 5 color roles ONLY: background, accent, primary, secondary, foreground
+- Each has 11-step scale (50-950). Use anchor tokens first: background-50, primary-500, accent-500, secondary-500
+- Typography: `var(--font-heading)`, `var(--font-body)`, `var(--font-label)`, `var(--font-mono)`
+- NEVER hardcode hex/rgb — always use token classes like `bg-primary-500 text-background-50`
+
+## 5. IMMEDIATE ACTIONS (Do These First)
+
+| # | Action | Time | Impact |
+|---|---|---|---|
+| 1 | DO NOT TOUCH workspace builder (ChatPanel, ai-api.ts, projects-store, PreviewPanel, sandbox-bundler) — it works | 0 | Blocks nothing |
+| 2 | Apply RLS policies to all 4 tables | 15 min | Closes security hole |
+| 3 | Read stripe-worker edge function from Supabase | 15 min | Prerequisite for payments |
+| 4 | Wire Stripe checkout to pricing page | 2-4 hrs | Unlocks revenue |
+| 5 | Fix navbar "Sign in" link (href="#" → /auth) | 2 min | Embarrassing bug |
+| 6 | Fix footer social links (real URLs or remove) | 5 min | Visible to all visitors |

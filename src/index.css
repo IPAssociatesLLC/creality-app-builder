@@ -1,0 +1,203 @@
+/* readdy-style-system:font-import */
+@import url('https://static.readdy.ai/static/fonts/stylesystem/v2/baloo-2/font.css');
+@import url('https://static.readdy.ai/static/fonts/stylesystem/v2/comfortaa/font.css');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: oklch(var(--background-50));
+  color: oklch(var(--foreground-950));
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.font-heading {
+  font-family: var(--font-heading);
+}
+
+@layer utilities {
+  .animate-delay-100 { animation-delay: 100ms; }
+  .animate-delay-200 { animation-delay: 200ms; }
+  .animate-delay-300 { animation-delay: 300ms; }
+  .animate-delay-400 { animation-delay: 400ms; }
+  .animate-delay-500 { animation-delay: 500ms; }
+
+  .opacity-0-initial { opacity: 0; }
+}
+
+/* readdy-style-system:colors:start */
+:root {
+  --background-50: 0.99 0.018 106.73;
+  --background-100: 0.955 0.017 106.73;
+  --background-200: 0.9 0.017 106.73;
+  --background-300: 0.82 0.016 106.73;
+  --background-400: 0.71 0.015 106.73;
+  --background-500: 0.58 0.014 106.73;
+  --background-600: 0.45 0.013 106.73;
+  --background-700: 0.34 0.012 106.73;
+  --background-800: 0.25 0.011 106.73;
+  --background-900: 0.17 0.01 106.73;
+  --background-950: 0.1 0.009 106.73;
+  --accent-50: 0.97 0.018 348.983;
+  --accent-100: 0.935 0.032 348.983;
+  --accent-200: 0.875 0.055 348.983;
+  --accent-300: 0.78 0.084 348.983;
+  --accent-400: 0.67 0.123 348.983;
+  --accent-500: 0.75 0.162 348.983;
+  --accent-600: 0.5 0.156 348.983;
+  --accent-700: 0.4 0.136 348.983;
+  --accent-800: 0.31 0.113 348.983;
+  --accent-900: 0.23 0.091 348.983;
+  --accent-950: 0.15 0.063 348.983;
+  --primary-50: 0.97 0.016 293.41;
+  --primary-100: 0.935 0.034 293.41;
+  --primary-200: 0.875 0.067 293.41;
+  --primary-300: 0.78 0.113 293.41;
+  --primary-400: 0.67 0.165 293.41;
+  --primary-500: 0.482 0.218 293.41;
+  --primary-600: 0.5 0.209 293.41;
+  --primary-700: 0.4 0.183 293.41;
+  --primary-800: 0.31 0.152 293.41;
+  --primary-900: 0.23 0.122 293.41;
+  --primary-950: 0.15 0.083 293.41;
+  --secondary-50: 0.97 0.017 155.551;
+  --secondary-100: 0.935 0.028 155.551;
+  --secondary-200: 0.875 0.048 155.551;
+  --secondary-300: 0.78 0.074 155.551;
+  --secondary-400: 0.67 0.108 155.551;
+  --secondary-500: 0.81 0.142 155.551;
+  --secondary-600: 0.5 0.122 155.551;
+  --secondary-700: 0.4 0.098 155.551;
+  --secondary-800: 0.31 0.076 155.551;
+  --secondary-900: 0.23 0.056 155.551;
+  --secondary-950: 0.15 0.037 155.551;
+  --foreground-50: 0.97 0.003 284.49;
+  --foreground-100: 0.93 0.004 284.49;
+  --foreground-200: 0.86 0.005 284.49;
+  --foreground-300: 0.76 0.007 284.49;
+  --foreground-400: 0.65 0.01 284.49;
+  --foreground-500: 0.54 0.013 284.49;
+  --foreground-600: 0.43 0.016 284.49;
+  --foreground-700: 0.34 0.018 284.49;
+  --foreground-800: 0.27 0.02 284.49;
+  --foreground-900: 0.2 0.021 284.49;
+  --foreground-950: 0.219 0.021 284.49;
+}
+
+.dark {
+  --background-50: 0.149 0.007 258.041;
+  --background-100: 0.184 0.005 258.041;
+  --background-200: 0.214 0.005 258.041;
+  --background-300: 0.244 0.004 258.041;
+  --background-400: 0.279 0.004 258.041;
+  --background-500: 0.319 0.004 258.041;
+  --background-600: 0.359 0.004 258.041;
+  --background-700: 0.409 0.003 258.041;
+  --background-800: 0.469 0.003 258.041;
+  --background-900: 0.539 0.002 258.041;
+  --background-950: 0.619 0.002 258.041;
+  --accent-50: 0.18 0.055 348.983;
+  --accent-100: 0.24 0.068 348.983;
+  --accent-200: 0.32 0.084 348.983;
+  --accent-300: 0.42 0.107 348.983;
+  --accent-400: 0.52 0.133 348.983;
+  --accent-500: 0.75 0.162 348.983;
+  --accent-600: 0.64 0.156 348.983;
+  --accent-700: 0.72 0.139 348.983;
+  --accent-800: 0.8 0.107 348.983;
+  --accent-900: 0.88 0.071 348.983;
+  --accent-950: 0.94 0.036 348.983;
+  --primary-50: 0.18 0.074 293.41;
+  --primary-100: 0.24 0.091 293.41;
+  --primary-200: 0.32 0.113 293.41;
+  --primary-300: 0.42 0.144 293.41;
+  --primary-400: 0.52 0.179 293.41;
+  --primary-500: 0.482 0.218 293.41;
+  --primary-600: 0.64 0.209 293.41;
+  --primary-700: 0.72 0.161 293.41;
+  --primary-800: 0.8 0.111 293.41;
+  --primary-900: 0.88 0.065 293.41;
+  --primary-950: 0.94 0.032 293.41;
+  --secondary-50: 0.18 0.044 155.551;
+  --secondary-100: 0.24 0.059 155.551;
+  --secondary-200: 0.32 0.074 155.551;
+  --secondary-300: 0.42 0.094 155.551;
+  --secondary-400: 0.52 0.117 155.551;
+  --secondary-500: 0.81 0.142 155.551;
+  --secondary-600: 0.64 0.137 155.551;
+  --secondary-700: 0.72 0.122 155.551;
+  --secondary-800: 0.8 0.094 155.551;
+  --secondary-900: 0.88 0.063 155.551;
+  --secondary-950: 0.94 0.037 155.551;
+  --foreground-50: 0.18 0.002 78.298;
+  --foreground-100: 0.26 0.002 78.298;
+  --foreground-200: 0.36 0.002 78.298;
+  --foreground-300: 0.48 0.002 78.298;
+  --foreground-400: 0.59 0.002 78.298;
+  --foreground-500: 0.68 0.003 78.298;
+  --foreground-600: 0.76 0.003 78.298;
+  --foreground-700: 0.83 0.004 78.298;
+  --foreground-800: 0.89 0.004 78.298;
+  --foreground-900: 0.94 0.004 78.298;
+  --foreground-950: 0.95 0.005 78.298;
+}
+
+html,
+body {
+  background: oklch(var(--background-50));
+  color: oklch(var(--foreground-950));
+}
+/* readdy-style-system:colors:end */
+
+/* readdy-style-system:typography:start */
+:root {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-family: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-heading: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-body: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-label: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+.font-sans,
+.font-body,
+html,
+body {
+  font-family: var(--font-body);
+}
+
+.font-heading,
+.font-display,
+.font-serif,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+[data-typography="heading"] {
+  font-family: var(--font-heading);
+}
+
+.font-label,
+:where(button, label, input, select, textarea, [data-typography="label"]) {
+  font-family: var(--font-label);
+}
+
+.font-mono,
+code,
+pre,
+kbd {
+  font-family: var(--font-mono);
+}
+/* readdy-style-system:typography:end */
