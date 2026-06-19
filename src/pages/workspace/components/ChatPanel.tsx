@@ -280,41 +280,25 @@ export default function ChatPanel({ onBuildStart, onBuildEnd, onGitHubImport, on
       const codeIsValid = isValidHtmlCode(rawOutput);
 
       let replyText = "";
-      if (buildMode === "browser-extension") {
-        const extFiles = extractExtensionFiles(rawOutput);
-        if (extFiles && extFiles.length > 0) { await onExtensionGenerated?.(extFiles); replyText = `Extension built! Check the preview panel for the files.`; }
-        else if (codeIsValid) { await onCodeGenerated(rawOutput); replyText = "Extension generated. Check the preview panel."; }
-        else { replyText = rawOutput.slice(0, 200).replace(/\n/g, " ") + "..."; }
-      } else if (buildMode === "react-app") {
-        const appFiles = extractExtensionFiles(rawOutput);
-        if (appFiles && appFiles.length > 0) { await onReactAppGenerated?.(appFiles); replyText = `React app built! Your app is live in the preview.`; }
-        else if (codeIsValid) { await onCodeGenerated(rawOutput); replyText = "React app generated. Check the preview panel."; }
-        else { replyText = rawOutput.slice(0, 200).replace(/\n/g, " ") + "..."; }
-      } else if (buildMode === "import-edit") {
-        const resultFiles = extractExtensionFiles(rawOutput);
-        if (resultFiles && resultFiles.length > 0) {
-          await onReactAppGenerated?.(resultFiles);
-          replyText = `Done! I've made the changes to your project. ${resultFiles.length} file${resultFiles.length > 1 ? "s" : ""} updated.`;
+      const extractedFiles = extractExtensionFiles(rawOutput);
+      const isMultiFile = extractedFiles && extractedFiles.length > 0;
+
+      if (isMultiFile) {
+        if (buildMode === "browser-extension") {
+          await onExtensionGenerated?.(extractedFiles);
+          replyText = `Extension built! Check the preview panel for the files.`;
         } else {
-          // Import/Edit mode failed to return structured JSON — try as raw code
-          const codeMatch = rawOutput.match(/```html\s*([\s\S]*?)```/) || rawOutput.match(/```\s*([\s\S]*?)```/);
-          if (codeMatch && isValidHtmlCode(codeMatch[1].trim())) {
-            await onCodeGenerated(codeMatch[1].trim());
-            replyText = "Updated! Your changes are live in the preview panel.";
-          } else if (rawOutput.length > 100 && codeIsValid) {
-            await onCodeGenerated(rawOutput);
-            replyText = "Updated! Your changes are live in the preview panel.";
-          } else {
-            throw new Error(`AI returned an unexpected response format (${rawOutput.length} chars). The model may have struggled with the multi-file project structure. Try simplifying your request or breaking it into smaller changes.`);
-          }
+          // Even if buildMode is 'web-app', if AI returned JSON, handle it gracefully as a React app
+          await onReactAppGenerated?.(extractedFiles);
+          replyText = `React app built! Your app is live in the preview.`;
         }
+      } else if (codeIsValid) {
+        await onCodeGenerated(rawOutput);
+        replyText = conversationHistory.length > 0 ? "Updated! Your changes are live in the preview." : "Done! Your app is live in the preview panel.";
       } else {
-        // web-app mode
-        if (codeIsValid) {
-          await onCodeGenerated(rawOutput);
-          replyText = conversationHistory.length > 0 ? "Updated! Your changes are live in the preview." : "Done! Your app is live in the preview panel.";
+        if (buildMode === "import-edit") {
+          throw new Error(`AI returned an unexpected response format (${rawOutput.length} chars). The model may have struggled with the multi-file project structure. Try simplifying your request or breaking it into smaller changes.`);
         } else {
-          // AI returned advice/troubleshooting text instead of code — show it as a chat message but don't save as generated code
           replyText = rawOutput;
         }
       }
