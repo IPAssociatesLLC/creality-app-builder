@@ -865,14 +865,14 @@ export async function generateCode({ config, prompt, conversationHistory, buildM
       onToken?.(chunk);
     }
     
-    return extractHtmlCode(fullText);
+    return buildMode === "web-app" ? extractHtmlCode(fullText) : fullText;
   } else {
     const data = await res.json();
     const content = data?.content || "";
     if (data?.contextPruned) {
       console.log(`CreAIlity: Context pruned — kept ${data.messagesKept}/${data.messagesTotal} messages`);
     }
-    return extractHtmlCode(content);
+    return buildMode === "web-app" ? extractHtmlCode(content) : content;
   }
 }
 
