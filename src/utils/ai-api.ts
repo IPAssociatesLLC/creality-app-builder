@@ -970,10 +970,11 @@ export function extractExtensionFiles(text: string): ExtensionFile[] | null {
   }
   
   if (!match) {
-    const trimmed = text.trim();
-    if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    const startIdx = text.indexOf("{");
+    const endIdx = text.lastIndexOf("}");
+    if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
       try {
-        const parsed = JSON.parse(trimmed);
+        const parsed = JSON.parse(text.slice(startIdx, endIdx + 1));
         if (typeof parsed === "object" && !Array.isArray(parsed)) {
           const files: ExtensionFile[] = [];
           for (const [filename, content] of Object.entries(parsed)) {
