@@ -788,7 +788,7 @@ interface ApiCallOptions {
   onToken?: (token: string) => void;
 }
 
-export async function generateCode({ config, prompt, conversationHistory, buildMode = "web-app", onStep, projectContext, conversationSummary, conversationId }: ApiCallOptions): Promise<string> {
+export async function generateCode({ config, prompt, conversationHistory, buildMode = "web-app", onStep, projectContext, conversationSummary, conversationId, stream, onToken }: ApiCallOptions): Promise<string> {
   const modelId = config.selectedModel;
 
   onStep?.("Connecting to AI model via secure proxy...");
