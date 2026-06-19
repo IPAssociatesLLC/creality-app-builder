@@ -856,13 +856,42 @@ export async function generateCode({ config, prompt, conversationHistory, buildM
     const reader = res.body.getReader();
     const decoder = new TextDecoder("utf-8");
     let fullText = "";
+    let buffer = "";
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      const chunk = decoder.decode(value, { stream: true });
-      fullText += chunk;
-      onToken?.(chunk);
+      buffer += decoder.decode(value, { stream: true });
+      
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      
+      for (let line of lines) {
+        line = line.trim();
+        if (!line.startsWith("data:")) continue;
+        const dataStr = line.slice(5).trim();
+        if (!dataStr || dataStr === "[DONE]") continue;
+        
+        try {
+          const data = JSON.parse(dataStr);
+          let textChunk = "";
+          
+          if (data.choices?.[0]?.delta?.content) {
+            textChunk = data.choices[0].delta.content; // OpenAI
+          } else if (data.type === "content_block_delta" && data.delta?.text) {
+            textChunk = data.delta.text; // Anthropic
+          } else if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+            textChunk = data.candidates[0].content.parts[0].text; // Gemini
+          }
+          
+          if (textChunk) {
+            fullText += textChunk;
+            onToken?.(textChunk);
+          }
+        } catch (e) {
+          // Ignore JSON parse errors for incomplete chunks
+        }
+      }
     }
     
     return buildMode === "web-app" ? extractHtmlCode(fullText) : fullText;
