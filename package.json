@@ -36,7 +36,7 @@
   "private": true,
   "scripts": {
     "build": "vite build",
-    "deploy-functions": "npx supabase functions deploy publish-sandbox --project-ref qyyfygcflzyfucypmfeu && npx supabase functions deploy deploy-worker --project-ref qyyfygcflzyfucypmfeu",
+    "deploy-functions": "npx supabase functions deploy publish-sandbox --project-ref qyyfygcflzyfucypmfeu && npx supabase functions deploy deploy-worker --project-ref qyyfygcflzyfucypmfeu && npx supabase functions deploy ai-proxy --project-ref qyyfygcflzyfucypmfeu && npx supabase functions deploy stripe-checkout --project-ref qyyfygcflzyfucypmfeu && npx supabase functions deploy stripe-webhook --project-ref qyyfygcflzyfucypmfeu",
     "dev": "vite",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
