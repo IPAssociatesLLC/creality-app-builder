@@ -1,10 +1,11 @@
-// =============================================================================
-// CreAIlity Cloudflare Worker — KV Storage Edition (2026)
-// =============================================================================
+// ==============================================================================
+// CreAIlity Cloudflare Worker ℒ KV Storage Edition (2026)
+// ==============================================================================
 // Serves static files from Cloudflare KV storage per subdomain
 // Deploy: Via API from Supabase Edge Function
 // Routes: *.crealityapp.com/*
-// =============================================================================
+// Security: Requires DEPLOY_SECRET env variable
+// ===============================================================================
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -105,8 +106,7 @@ function getContentType(path) {
   return "text/plain";
 }
 
-// Deploy files to KV
-async function handleDeploy(request, env) {
+// Deploy files to KV - SECURED
   try {
     const body = await request.json();
     const { slug, files, secret } = body;
@@ -115,20 +115,21 @@ async function handleDeploy(request, env) {
       return jsonResponse({ error: "Missing slug or files" }, 400);
     }
 
-    // Auth check: accept either header or body secret
-    const deploySecret = env.DEPLOY_SECRET || "";
-    const authHeader = request.headers.get("Authorization") || "";
-    const xSecret = request.headers.get("X-Deploy-Secret") || "";
-    
-    // Allow three auth methods: Bearer token, X-Deploy-Secret header, or secret in body
-    const isAuthorized = 
-      !deploySecret || // No secret configured = open access
-      authHeader.includes(deploySecret) ||
-      xSecret === deploySecret ||
-      secret === deploySecret;
+    // Authcheck: requires either Authorization header or X-Deploy-Secret header
+    const deploySecret = env.DEPLOY_SECRET;
+    if (deploySecret) {
+      const authHeader = request.headers.get("Authorization") || "";
+      const xSecret = request.headers.get("X-Deploy-Secret") || "";
+      const isAuthorized = 
+        authHeader.includes(deploySecret) ||
+        xSecret === deploySecret ||
+        secret === deploySecret;
 
-    if (!isAuthorized) {
-      return jsonResponse({ error: "Unauthorized" }, 401);
+      if (!isAuthorized) {
+        return jsonResponse({ error: "Unauthorized" }, 401);
+      }
+    } else {
+      return jsonResponse({ error: "Server not configured for deployments" }, 503);
     }
 
     const maxFileSize = 25 * 1024 * 1024; // 25MB
@@ -164,7 +165,6 @@ async function handleDeploy(request, env) {
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Deploy failed";
-    console.error("CreAIlity Deploy: ", msg, err);
     return jsonResponse({ error: msg }, 500);
   }
 }
@@ -173,7 +173,7 @@ async function handleDeploy(request, env) {
 function jsonResponse(data, status) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...CORS, "Content-Type": "application/json" },
+    headers: { ...CORSM, "Content-Type": "application/json" },
   });
 }
 
