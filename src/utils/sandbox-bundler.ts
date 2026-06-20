@@ -300,6 +300,10 @@ function transformSourceFile(content: string, fileName: string): string {
   // Clean up any leftover "export { ... }" statements
   result = result.replace(/export\s*\{[^}]*\};?\s*/g, "");
 
+  // ── Strip Vite import.meta (not available in sandbox scripts) ──
+  result = result.replace(/import\.meta\.env\.\w+/g, "({})");
+  result = result.replace(/import\.meta/g, "({env:{}})");
+
   return `// ── ${fileName} ──\n${result}`;
 }
 
