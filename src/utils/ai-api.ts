@@ -207,6 +207,29 @@ PERFORMANCE
 - Efficient event handlers — no inline arrow functions in render
 
 ───────────────────────────────────────
+COMPLETE WEBSITE & APP ARCHITECTURE DIRECTIVES (MANDATORY)
+───────────────────────────────────────
+Every project, page, and component you build must follow these comprehensive instructions:
+
+1. MANDATORY PAGE LAYOUT ELEMENTS:
+- HEADER & NAVIGATION: Include a beautiful header containing a company logo, links to pages (Home, Features, Pricing, About, Contact, or Dashboard), and a prominent CTA button. For mobile sizes, you MUST collapse links into a fully-functional hamburger menu (using local state toggles to open/close a slide-out drawer or overlay).
+- HERO SECTION: Include a primary hero section with a bold, high-impact heading, a supporting paragraph, and a double CTA block (one high-contrast primary action button, one secondary clean link/outline button).
+- MULTIPLE BODY SECTIONS: Do not build a basic single-fold page. Include at least 4-5 distinct sections scrolling down the page. Examples: features grid with detailed icons, dynamic statistics dashboard, testimonial carousel cards, a pricing tier table, an interactive FAQ accordion list, and a newsletter sign-up form.
+- FOOTER: Include a footer structured into multiple columns (company mission, quick links, legal/privacy links, email sign-up input, and copyright notice).
+
+2. MULTI-PAGE ROUTING & LINKS:
+- For static HTML websites, create separate HTML files (index.html, about.html, contact.html, pricing.html, etc.) and link them using relative URLs (e.g., href="about.html" or href="pricing.html") so that the user can navigate between them.
+
+3. RICH INTERACTIVE COMPONENT BEHAVIOR:
+- MODALS & SLIDE-OUTS: Include smooth CSS transitions. Backdrop overlays must use a transparent dark color with backdrop-blur, be closeable on click or Escape key, and transition elements smoothly with scale+fade.
+- CAROUSELS & SLIDERS: Include buttons to move next/prev and indicators showing current items.
+- SEARCH & FILTERING: Implement real-time client-side search filtering on lists or card grids with category tabs (e.g. "All", "Active", "Pending") and sort dropdowns.
+
+4. DATABASE & STATE MANAGEMENT Integration:
+- CLOUD SYNC: When building notes, database views, or forms, connect them directly to Supabase client queries (\`supabase.from(...)\`) to perform CRUD operations (fetch, insert, update, delete). Include database loading, empty table skeletons, and failure alerts with retry buttons.
+- TOAST NOTIFICATIONS: Trigger custom popup toasts (success, warning, error) that slide in from the top-right and auto-dismiss after 4 seconds on actions like form submissions, database updates, or authentication.
+
+───────────────────────────────────────
 FINAL RULES
 ───────────────────────────────────────
 - Return ONLY a JSON code block: \`\`\`json { "index.html": "...", "style.css": "...", ... } \`\`\`
@@ -620,6 +643,30 @@ RESPONSIVE DESIGN
 - Tables: overflow-x-auto with min-width wrapper
 - Font scaling: text-sm md:text-base, text-3xl md:text-5xl
 - Padding: px-4 md:px-8, py-8 md:py-16
+
+───────────────────────────────────────
+COMPLETE WEBSITE & APP ARCHITECTURE DIRECTIVES (MANDATORY)
+───────────────────────────────────────
+Every project, page, and component you build must follow these comprehensive instructions:
+
+1. MANDATORY PAGE LAYOUT ELEMENTS:
+- HEADER & NAVIGATION: Include a beautiful header containing a company logo, links to pages (Home, Features, Pricing, About, Contact, or Dashboard), and a prominent CTA button. For mobile sizes, you MUST collapse links into a fully-functional hamburger menu (using local state toggles to open/close a slide-out drawer or overlay).
+- HERO SECTION: Include a primary hero section with a bold, high-impact heading, a supporting paragraph, and a double CTA block (one high-contrast primary action button, one secondary clean link/outline button).
+- MULTIPLE BODY SECTIONS: Do not build a basic single-fold page. Include at least 4-5 distinct sections scrolling down the page. Examples: features grid with detailed icons, dynamic statistics dashboard, testimonial carousel cards, a pricing tier table, an interactive FAQ accordion list, and a newsletter sign-up form.
+- FOOTER: Include a footer structured into multiple columns (company mission, quick links, legal/privacy links, email sign-up input, and copyright notice).
+
+2. MULTI-PAGE ROUTING & LINKS:
+- For React apps, use ReactRouterDOM UMD globals (BrowserRouter, Routes, Route, Link) to establish multi-page routes. Define views for Home, Dashboard, Details, and Settings.
+- For static HTML websites, create separate HTML files (index.html, about.html, contact.html, pricing.html, etc.) and link them using relative URLs (e.g., href="about.html" or href="pricing.html") so that the user can navigate between them.
+
+3. RICH INTERACTIVE COMPONENT BEHAVIOR:
+- MODALS & SLIDE-OUTS: Include smooth CSS transitions. Backdrop overlays must use a transparent dark color with backdrop-blur, be closeable on click or Escape key, and transition elements smoothly with scale+fade.
+- CAROUSELS & SLIDERS: Include buttons to move next/prev and indicators showing current items.
+- SEARCH & FILTERING: Implement real-time client-side search filtering on lists or card grids with category tabs (e.g. "All", "Active", "Pending") and sort dropdowns.
+
+4. DATABASE & STATE MANAGEMENT Integration:
+- CLOUD SYNC: When building notes, database views, or forms, connect them directly to Supabase client queries (\`supabase.from(...)\`) to perform CRUD operations (fetch, insert, update, delete). Include database loading, empty table skeletons, and failure alerts with retry buttons.
+- TOAST NOTIFICATIONS: Trigger custom popup toasts (success, warning, error) that slide in from the top-right and auto-dismiss after 4 seconds on actions like form submissions, database updates, or authentication.
 
 ───────────────────────────────────────
 FINAL RULES

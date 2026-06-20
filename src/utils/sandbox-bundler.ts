@@ -15,12 +15,16 @@ export function buildSandboxHtml(files: ImportedFile[]): BundledResult | null {
   if (!files || files.length === 0) return null;
 
   // Find entry HTML — prefer root index.html, then any index.html
+  const htmlFiles = files.filter((f) => f.name.endsWith(".html"));
   const htmlFile =
     files.find((f) => f.name === "index.html") ||
     files.find((f) => f.name.endsWith("/index.html")) ||
-    null;
+    (htmlFiles.length > 0 ? htmlFiles[0] : null);
 
   if (!htmlFile) return null;
+
+  // Let's bundle other HTML pages
+  const otherPages: Record<string, string> = {};
 
   // Collect source files
   const sourceFiles = files.filter((f) => {
@@ -65,6 +69,10 @@ export function buildSandboxHtml(files: ImportedFile[]): BundledResult | null {
     (f) => f.name.endsWith(".ts") || f.name.endsWith(".tsx"),
   );
 
+  const hasRouter = sourceFiles.some((f) => f.content.includes("react-router-dom"));
+  const hasSupabase = sourceFiles.some((f) => f.content.includes("@supabase/supabase-js") || f.content.includes("supabase.co"));
+  const hasLucide = sourceFiles.some((f) => f.content.includes("lucide-react"));
+
   // Sort files: entry file last (so dependencies are defined first)
   const entryPatterns = ["main.", "index.", "app.", "App."];
   const sortedSourceFiles = [...sourceFiles].sort((a, b) => {
@@ -77,6 +85,7 @@ export function buildSandboxHtml(files: ImportedFile[]): BundledResult | null {
 
   // Transform source files into bundle-ready code
   const transformedBlocks = sortedSourceFiles.map((f) => transformSourceFile(f.content, f.name));
+  const bundledJs = transformedBlocks.join("\n\n");
 
   // Bundle CSS — strip @tailwind directives (CDN handles them)
   const bundledCss = cssFiles
@@ -89,17 +98,81 @@ export function buildSandboxHtml(files: ImportedFile[]): BundledResult | null {
     })
     .join("\n\n");
 
-  // Build composite HTML
-  const html = buildCompositeHtml(
-    htmlFile.content,
-    transformedBlocks.join("\n\n"),
-    bundledCss,
-    hasReact,
-    hasTailwind,
-    hasTypeScript,
-  );
+  // Helper to compile a single HTML file content with scripts and CSS injected
+  const compilePage = (htmlContent: string) => {
+    return buildCompositeHtml(
+      htmlContent,
+      bundledJs,
+      bundledCss,
+      hasReact,
+      hasTailwind,
+      hasTypeScript,
+      hasRouter,
+      hasSupabase,
+      hasLucide,
+    );
+  };
 
-  return { html, hasReact, sourceFileCount: sourceFiles.length };
+  // Compile other HTML pages first
+  for (const file of htmlFiles) {
+    if (file.name !== htmlFile.name) {
+      let name = file.name;
+      if (name.startsWith("./")) name = name.slice(2);
+      otherPages[name] = compilePage(file.content);
+    }
+  }
+
+  // Compile the entry HTML file
+  let mainHtml = compilePage(htmlFile.content);
+
+  // Inject otherPages map and router script into all pages so they can navigate
+  const pagesMapStr = JSON.stringify(otherPages);
+  const routerScript = `
+<script>
+(function() {
+  window.__SANDBOX_PAGES__ = ${pagesMapStr};
+  
+  function interceptLinks() {
+    document.addEventListener("click", function(e) {
+      const link = e.target.closest("a");
+      if (link) {
+        let href = link.getAttribute("href");
+        if (href) {
+          if (href.startsWith("./")) href = href.slice(2);
+          if (window.__SANDBOX_PAGES__[href]) {
+            e.preventDefault();
+            const newHtml = window.__SANDBOX_PAGES__[href];
+            document.open();
+            document.write(newHtml);
+            document.close();
+          }
+        }
+      }
+    });
+  }
+  
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", interceptLinks);
+  } else {
+    interceptLinks();
+  }
+})();
+</script>
+`;
+
+  const injectRouter = (htmlText: string) => {
+    if (htmlText.includes("</head>")) {
+      return htmlText.replace("</head>", `  ${routerScript}\n</head>`);
+    }
+    return routerScript + htmlText;
+  };
+
+  mainHtml = injectRouter(mainHtml);
+  for (const name of Object.keys(otherPages)) {
+    otherPages[name] = injectRouter(otherPages[name]);
+  }
+
+  return { html: mainHtml, hasReact, sourceFileCount: sourceFiles.length };
 }
 
 /**
@@ -108,6 +181,45 @@ export function buildSandboxHtml(files: ImportedFile[]): BundledResult | null {
  */
 function transformSourceFile(content: string, fileName: string): string {
   let result = content;
+
+  // ── Handle React Router DOM UMD imports ──
+  result = result.replace(
+    /import\s+([^'"]+)\s+from\s*['"]react-router-dom['"];?/g,
+    (_match, importsClause: string) => {
+      const namedImports = importsClause.match(/\{([^}]+)\}/);
+      if (namedImports) {
+        const cleaned = namedImports[1].split(",").map(s => s.trim()).filter(Boolean);
+        return `const { ${cleaned.join(", ")} } = ReactRouterDOM;`;
+      }
+      return `const ReactRouterDOMGlobal = ReactRouterDOM;`;
+    }
+  );
+
+  // ── Handle Supabase UMD imports ──
+  result = result.replace(
+    /import\s+([^'"]+)\s+from\s*['"]@supabase\/supabase-js['"];?/g,
+    (_match, importsClause: string) => {
+      const namedImports = importsClause.match(/\{([^}]+)\}/);
+      if (namedImports) {
+        const cleaned = namedImports[1].split(",").map(s => s.trim()).filter(Boolean);
+        return `const { ${cleaned.join(", ")} } = supabase;`;
+      }
+      return "";
+    }
+  );
+
+  // ── Handle Lucide React UMD imports ──
+  result = result.replace(
+    /import\s+([^'"]+)\s+from\s*['"]lucide-react['"];?/g,
+    (_match, importsClause: string) => {
+      const namedImports = importsClause.match(/\{([^}]+)\}/);
+      if (namedImports) {
+        const cleaned = namedImports[1].split(",").map(s => s.trim()).filter(Boolean);
+        return `const { ${cleaned.join(", ")} } = LucideReact;`;
+      }
+      return `const LucideReactGlobal = LucideReact;`;
+    }
+  );
 
   // ── Handle React namespace import ──
   // import React from 'react' → React is global via UMD
@@ -201,6 +313,9 @@ function buildCompositeHtml(
   hasReact: boolean,
   hasTailwind: boolean,
   hasTypeScript: boolean,
+  hasRouter: boolean,
+  hasSupabase: boolean,
+  hasLucide: boolean,
 ): string {
   let result = htmlContent;
 
@@ -222,6 +337,23 @@ function buildCompositeHtml(
       '<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>',
       '<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>',
       '<script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>',
+    );
+    if (hasRouter) {
+      headScripts.push(
+        '<script crossorigin src="https://unpkg.com/react-router-dom@6.22.3/dist/umd/react-router-dom.production.min.js"></script>'
+      );
+    }
+    if (hasLucide) {
+      headScripts.push(
+        '<script src="https://unpkg.com/lucide@latest"></script>',
+        '<script src="https://unpkg.com/lucide-react@latest"></script>'
+      );
+    }
+  }
+
+  if (hasSupabase) {
+    headScripts.push(
+      '<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>'
     );
   }
 

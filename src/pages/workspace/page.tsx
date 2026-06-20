@@ -171,14 +171,31 @@ export default function WorkspacePage() {
     const label = lastUserPrompt
       ? lastUserPrompt.slice(0, 60)
       : "Initial build";
-    if (project.generatedCode !== code) {
-      await saveVersion(project.id, code, label, lastUserPrompt || "Build");
-    }
-    const cached = await loadProject(project.id);
-    if (cached) {
-      cached.generatedCode = code;
-      await saveProject(cached);
-      setProject({ ...cached });
+
+    const freshProject = await loadProject(project.id);
+    if (!freshProject) return;
+
+    if (freshProject.importedFiles && freshProject.importedFiles.length > 0) {
+      // It's a multi-file project. Update index.html instead of generatedCode
+      const updatedFiles = freshProject.importedFiles.map(f => 
+        f.name === "index.html" ? { ...f, content: code } : f
+      );
+      if (!updatedFiles.some(f => f.name === "index.html")) {
+        updatedFiles.push({ name: "index.html", content: code, language: "html" });
+      }
+      await saveVersion(project.id, JSON.stringify(updatedFiles), label, lastUserPrompt || "Build");
+      freshProject.importedFiles = updatedFiles;
+      await saveProject(freshProject);
+      setProject({ ...freshProject });
+      setViewingVersionCode(null);
+      setActiveViewingFile("index.html");
+    } else {
+      if (freshProject.generatedCode !== code) {
+        await saveVersion(project.id, code, label, lastUserPrompt || "Build");
+      }
+      freshProject.generatedCode = code;
+      await saveProject(freshProject);
+      setProject({ ...freshProject });
       setViewingVersionCode(null);
       setActiveViewingFile("generated");
     }
@@ -298,15 +315,31 @@ export default function WorkspacePage() {
     const label = lastUserPrompt
       ? lastUserPrompt.slice(0, 60)
       : "Extension build";
-    await saveVersion(project.id, JSON.stringify(files), label, lastUserPrompt || "Extension generated");
 
     const freshProject = await loadProject(project.id);
     if (!freshProject) return;
 
-    freshProject.importedFiles = files;
+    // Merge files
+    const existingFiles = freshProject.importedFiles || [];
+    const mergedFiles = [...existingFiles];
+    
+    for (const newFile of files) {
+      const idx = mergedFiles.findIndex(f => f.name === newFile.name);
+      if (idx >= 0) {
+        mergedFiles[idx] = newFile;
+      } else {
+        mergedFiles.push(newFile);
+      }
+    }
+
+    await saveVersion(project.id, JSON.stringify(mergedFiles), label, lastUserPrompt || "Extension generated");
+
+    freshProject.importedFiles = mergedFiles;
     await saveProject(freshProject);
     setProject({ ...freshProject });
-    setActiveViewingFile(files[0].name);
+    if (files.length > 0) {
+      setActiveViewingFile(files[0].name);
+    }
     setViewingVersionCode(null);
   };
 
@@ -319,16 +352,32 @@ export default function WorkspacePage() {
     const label = lastUserPrompt
       ? lastUserPrompt.slice(0, 60)
       : isReact ? "React app build" : "Website build";
-    await saveVersion(project.id, JSON.stringify(files), label, lastUserPrompt || (isReact ? "React app generated" : "Website generated"));
 
     const freshProject = await loadProject(project.id);
     if (!freshProject) return;
 
-    freshProject.importedFiles = files;
-    freshProject.name = files.length > 0 ? (isReact ? "React App" : "Website") : freshProject.name;
+    // Merge files
+    const existingFiles = freshProject.importedFiles || [];
+    const mergedFiles = [...existingFiles];
+    
+    for (const newFile of files) {
+      const idx = mergedFiles.findIndex(f => f.name === newFile.name);
+      if (idx >= 0) {
+        mergedFiles[idx] = newFile;
+      } else {
+        mergedFiles.push(newFile);
+      }
+    }
+
+    await saveVersion(project.id, JSON.stringify(mergedFiles), label, lastUserPrompt || (isReact ? "React app generated" : "Website generated"));
+
+    freshProject.importedFiles = mergedFiles;
+    freshProject.name = mergedFiles.length > 0 ? (isReact ? "React App" : "Website") : freshProject.name;
     await saveProject(freshProject);
     setProject({ ...freshProject });
-    setActiveViewingFile(files[0].name);
+    if (files.length > 0) {
+      setActiveViewingFile(files[0].name);
+    }
     setViewingVersionCode(null);
   };
 
