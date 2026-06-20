@@ -22,7 +22,7 @@ import {
   type ImportedFile,
   type UserPlan,
 } from "@/utils/projects-store";
-import type { ConversationMessage } from "@/utils/ai-api";
+import type { ConversationMessage, BuildMode } from "@/utils/ai-api";
 import { buildSandboxHtml } from "@/utils/sandbox-bundler";
 
 type ActivePanel = "chat" | "preview" | "both";
@@ -272,57 +272,81 @@ export default function WorkspacePage() {
     setViewingVersionCode(null);
   };
 
-  const handleImportFromGitHub = (
+  const handleImportFromGitHub = async (
     repo: string,
     files?: { name: string; content: string; language: string }[]
   ) => {
     if (!project || !files || files.length === 0) return;
-    persistProject({
-      name: repo.split("/").pop() || "Imported Project",
-      importedFiles: files,
-    });
-    setActiveViewingFile(files[0].name);
-    setShowGitHub(false);
-  };
-
-  const handleExtensionGenerated = (
-    files: { name: string; content: string; language: string }[]
-  ) => {
-    if (!project || files.length === 0) return;
-    persistProject({ importedFiles: files });
-    setActiveViewingFile(files[0].name);
-    setViewingVersionCode(null);
-  };
-
-  const handleReactAppGenerated = async (
-    files: { name: string; content: string; language: string }[]
-  ) => {
-    if (!project || files.length === 0) return;
-    const label = lastUserPrompt
-      ? lastUserPrompt.slice(0, 60)
-      : "React app build";
-    await saveVersion(project.id, JSON.stringify(files.map(f => f.name)), label, lastUserPrompt || "React app generated");
+    const label = `Import from GitHub: ${repo}`;
+    await saveVersion(project.id, JSON.stringify(files), label, `GitHub import: ${repo}`);
 
     const freshProject = await loadProject(project.id);
     if (!freshProject) return;
 
     freshProject.importedFiles = files;
-    freshProject.name = files.length > 0 ? "React App" : freshProject.name;
+    freshProject.name = repo.split("/").pop() || "Imported Project";
+    await saveProject(freshProject);
+    setProject({ ...freshProject });
+    setActiveViewingFile(files[0].name);
+    setShowGitHub(false);
+  };
+
+  const handleExtensionGenerated = async (
+    files: { name: string; content: string; language: string }[]
+  ) => {
+    if (!project || files.length === 0) return;
+    const label = lastUserPrompt
+      ? lastUserPrompt.slice(0, 60)
+      : "Extension build";
+    await saveVersion(project.id, JSON.stringify(files), label, lastUserPrompt || "Extension generated");
+
+    const freshProject = await loadProject(project.id);
+    if (!freshProject) return;
+
+    freshProject.importedFiles = files;
     await saveProject(freshProject);
     setProject({ ...freshProject });
     setActiveViewingFile(files[0].name);
     setViewingVersionCode(null);
   };
 
-  const handleUploadedFiles = (
+  const handleReactAppGenerated = async (
+    files: { name: string; content: string; language: string }[],
+    mode?: BuildMode
+  ) => {
+    if (!project || files.length === 0) return;
+    const isReact = mode === "react-app";
+    const label = lastUserPrompt
+      ? lastUserPrompt.slice(0, 60)
+      : isReact ? "React app build" : "Website build";
+    await saveVersion(project.id, JSON.stringify(files), label, lastUserPrompt || (isReact ? "React app generated" : "Website generated"));
+
+    const freshProject = await loadProject(project.id);
+    if (!freshProject) return;
+
+    freshProject.importedFiles = files;
+    freshProject.name = files.length > 0 ? (isReact ? "React App" : "Website") : freshProject.name;
+    await saveProject(freshProject);
+    setProject({ ...freshProject });
+    setActiveViewingFile(files[0].name);
+    setViewingVersionCode(null);
+  };
+
+  const handleUploadedFiles = async (
     name: string,
     files?: { name: string; content: string; language: string }[]
   ) => {
     if (!project || !files || files.length === 0) return;
-    persistProject({
-      name: name.replace(/\.(zip|tar\.gz)$/, ""),
-      importedFiles: files,
-    });
+    const label = `Upload: ${name}`;
+    await saveVersion(project.id, JSON.stringify(files), label, `ZIP Upload: ${name}`);
+
+    const freshProject = await loadProject(project.id);
+    if (!freshProject) return;
+
+    freshProject.importedFiles = files;
+    freshProject.name = name.replace(/\.(zip|tar\.gz)$/, "");
+    await saveProject(freshProject);
+    setProject({ ...freshProject });
     setActiveViewingFile(files[0].name);
     setShowUpload(false);
   };
@@ -578,7 +602,7 @@ export default function WorkspacePage() {
                   const updatedFiles = project.importedFiles.map((f) =>
                     f.name === activeViewingFile ? { ...f, content: code } : f
                   );
-                  await saveVersion(project.id, code, `Edit ${activeViewingFile}`, "code editor");
+                  await saveVersion(project.id, JSON.stringify(updatedFiles), `Edit ${activeViewingFile}`, "code editor");
                   await saveProject({ ...project, importedFiles: updatedFiles });
                   setProject((prev) => prev ? { ...prev, importedFiles: updatedFiles } : prev);
                 } else {

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/use-auth";
 import type { ImportedFile, UserPlan } from "@/utils/projects-store";
 import { supabase } from "@/lib/supabase";
+import { buildSandboxHtml } from "@/utils/sandbox-bundler";
 
 
 interface TopBarProps {
@@ -41,14 +42,20 @@ function DeployModal({ code, projectId, projectName, customDomain, onCustomDomai
   const checkSlugAvailability = useCallback(async (slug: string) => {
     if (!slug || slug.length < 3) { setSlugAvailable(null); return; }
     setCheckingSlug(true);
-    const { count, error } = await supabase
+    let query = supabase
       .from("sandbox_deployments")
       .select("id", { count: "exact", head: true })
       .eq("slug", slug);
+
+    if (projectId) {
+      query = query.neq("project_id", projectId);
+    }
+
+    const { count, error } = await query;
     if (error) { setSlugAvailable(null); setCheckingSlug(false); return; }
     setSlugAvailable(count === 0);
     setCheckingSlug(false);
-  }, []);
+  }, [projectId]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -78,10 +85,28 @@ function DeployModal({ code, projectId, projectName, customDomain, onCustomDomai
     onCustomDomainChange(finalSlug);
 
     try {
-      await supabase.functions.invoke('deploy-worker', { body: { action: "setup" } });
-      const files = importedFiles && importedFiles.length > 0
+      try {
+        await supabase.functions.invoke('deploy-worker', { body: { action: "setup" } });
+      } catch (err) {
+        console.warn("CreAIlity: deploy-worker setup skipped or failed. Proceeding to publish directly.", err);
+      }
+
+      let files = importedFiles && importedFiles.length > 0
         ? importedFiles
         : [{ name: "index.html", content: code, language: "html" }];
+
+      // If project has React/TypeScript files, compile using in-browser builder
+      const hasReactOrTs = files.some(f => f.name.endsWith(".tsx") || f.name.endsWith(".ts"));
+      if (hasReactOrTs) {
+        const bundle = buildSandboxHtml(files);
+        if (bundle?.html) {
+          files = [
+            ...files.filter(f => f.name !== "index.html" && f.name !== "/index.html"),
+            { name: "index.html", content: bundle.html, language: "html" }
+          ];
+        }
+      }
+
       const { data: deployData, error: deployErr } = await supabase.functions.invoke('publish-sandbox', {
         body: {
           projectId,

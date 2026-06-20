@@ -14,7 +14,7 @@ interface ChatPanelProps {
   onOpenModelSettings: () => void;
   onCodeGenerated: (code: string) => void;
   onExtensionGenerated?: (files: { name: string; content: string; language: string }[]) => void;
-  onReactAppGenerated?: (files: { name: string; content: string; language: string }[]) => void;
+  onReactAppGenerated?: (files: { name: string; content: string; language: string }[], mode?: BuildMode) => void;
   conversationHistory: ConversationMessage[];
   onConversationUpdate: (history: ConversationMessage[]) => void;
   conversationId?: string | null;
@@ -55,7 +55,7 @@ function MessageBubble({ msg, onAction, onRetry }: { msg: ChatMessage; onAction?
 
 const BUILD_MODES: { id: BuildMode; label: string; icon: string; desc: string }[] = [
   { id: "react-app", label: "React App", icon: "ri-reactjs-line", desc: "Build a full-stack multi-file React + TypeScript app" },
-  { id: "web-app", label: "Web Page", icon: "ri-window-line", desc: "Build a single-page web application" },
+  { id: "web-app", label: "Website", icon: "ri-window-line", desc: "Build a multi-page website or web application" },
   { id: "browser-extension", label: "Extension", icon: "ri-puzzle-line", desc: "Build a Chrome/Firefox browser extension" },
   { id: "import-edit", label: "Import & Edit", icon: "ri-git-branch-line", desc: "Import an existing project from GitHub, ZIP, or paste code and make edits" },
 ];
@@ -305,9 +305,11 @@ export default function ChatPanel({ onBuildStart, onBuildEnd, onGitHubImport, on
           await onExtensionGenerated?.(extractedFiles);
           replyText = `Extension built! Check the preview panel for the files.`;
         } else {
-          // Even if buildMode is 'web-app', if AI returned JSON, handle it gracefully as a React app
-          await onReactAppGenerated?.(extractedFiles);
-          replyText = `React app built! Your app is live in the preview.`;
+          // Even if buildMode is 'web-app', if AI returned JSON, handle it gracefully as a React app / Website
+          await onReactAppGenerated?.(extractedFiles, buildMode);
+          replyText = buildMode === "web-app"
+            ? `Website built! Your site is live in the preview.`
+            : `React app built! Your app is live in the preview.`;
         }
       } else if (codeIsValid) {
         await onCodeGenerated(rawOutput);
@@ -420,7 +422,7 @@ export default function ChatPanel({ onBuildStart, onBuildEnd, onGitHubImport, on
           <div className="w-3.5 h-3.5 flex items-center justify-center">
             <i className={`${BUILD_MODES.find(m => m.id === buildMode)?.icon || "ri-window-line"} text-xs`} />
           </div>
-          <span>{BUILD_MODES.find(m => m.id === buildMode)?.label || "Web Page"}</span>
+          <span>{BUILD_MODES.find(m => m.id === buildMode)?.label || "Website"}</span>
           {buildMode === "browser-extension" && <span className="text-[9px] bg-primary-500/20 text-primary-700 border border-primary-500/30 rounded-full px-1.5 py-0.5 leading-none">NEW</span>}
           <i className={`ri-arrow-down-s-line text-foreground-500 text-xs transition-transform ${modeDropdownOpen ? "rotate-180" : ""}`} />
         </button>

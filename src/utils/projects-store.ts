@@ -222,15 +222,29 @@ export async function restoreVersion(projectId: string, versionId: string): Prom
   if (!version) return null;
 
   if (userId) {
-    await supabase.from("projects").update({
-      generated_code: version.code,
+    let updateObj: any = {
       updated_at: new Date().toISOString(),
-    }).eq("id", projectId).eq("user_id", userId);
+    };
+
+    try {
+      const parsed = JSON.parse(version.code);
+      if (Array.isArray(parsed) && parsed.length > 0 && "content" in parsed[0]) {
+        updateObj.imported_files = parsed;
+        updateObj.generated_code = "";
+      } else {
+        updateObj.generated_code = version.code;
+        updateObj.imported_files = [];
+      }
+    } catch {
+      updateObj.generated_code = version.code;
+      updateObj.imported_files = [];
+    }
+
+    await supabase.from("projects").update(updateObj).eq("id", projectId).eq("user_id", userId);
   }
 
   const project = await loadProject(projectId);
   if (project) {
-    project.generatedCode = version.code;
     project.activeVersionId = versionId;
   }
   return project;

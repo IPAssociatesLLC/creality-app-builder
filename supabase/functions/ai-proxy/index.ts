@@ -18,7 +18,7 @@ const MODEL_LIMITS: Record<string, { total: number; safeInput: number }> = {
   "grok-3": { total: 128000, safeInput: 100000 },
 };
 
-// ─── MESSAGE IMPORTANCE SCORING ───
+// â”€â”€â”€ MESSAGE IMPORTANCE SCORING â”€â”€â”€
 // Scores messages so important older ones survive pruning
 const IMPORTANCE_MARKERS = [
   { pattern: /architecture|structure|component tree|routing|data flow|tech stack/i, weight: 5 },
@@ -49,7 +49,7 @@ function scoreMessageImportance(content: string): number {
   return score;
 }
 
-// ─── SMART DECISION LOG EXTRACTION ───
+// â”€â”€â”€ SMART DECISION LOG EXTRACTION â”€â”€â”€
 function extractDecisions(messages: { role: string; content: string }[]): string {
   const decisions: string[] = [];
   
@@ -86,7 +86,7 @@ function extractDecisions(messages: { role: string; content: string }[]): string
   return decisions.slice(-15).join("\n"); // Keep last 15 decisions
 }
 
-// ─── SMART CONTEXT LAYERING (THE REAL UPGRADE) ───
+// â”€â”€â”€ SMART CONTEXT LAYERING (THE REAL UPGRADE) â”€â”€â”€
 function buildSmartContext(
   messages: { role: string; content: string }[],
   systemPrompt: string,
@@ -99,13 +99,13 @@ function buildSmartContext(
   const limit = MODEL_LIMITS[modelId] || MODEL_LIMITS["gpt-4o"];
   const maxInputTokens = limit.safeInput;
 
-  // ── LAYER 1: Decision Log (highest priority, always injected) ──
+  // â”€â”€ LAYER 1: Decision Log (highest priority, always injected) â”€â”€
   const freshDecisions = extractDecisions(messages);
   const combinedDecisions = [decisionLog, freshDecisions].filter(Boolean).join("\n");
   
-  // ── LAYER 2: Project Blueprint (always injected) ──
+  // â”€â”€ LAYER 2: Project Blueprint (always injected) â”€â”€
   
-  // ── LAYER 3: Scoring & Smart Selection ──
+  // â”€â”€ LAYER 3: Scoring & Smart Selection â”€â”€
   const scoredMessages = messages.map((m, idx) => ({
     ...m,
     score: scoreMessageImportance(m.content),
@@ -139,11 +139,11 @@ function buildSmartContext(
     if (idx >= 0 && !seen.has(idx)) { seen.add(idx); smartMessages.push({ role: m.role, content: m.content }); }
   }
 
-  // ── LAYER 4: Build Augmented System Prompt ──
+  // â”€â”€ LAYER 4: Build Augmented System Prompt â”€â”€
   let augmentedSystem = systemPrompt;
   
   if (combinedDecisions) {
-    augmentedSystem = `[CRITICAL — DECISION LOG]\nThe following key decisions were made during this project. NEVER contradict these unless the user explicitly asks:\n${combinedDecisions}\n\n---\n\n${augmentedSystem}`;
+    augmentedSystem = `[CRITICAL â€” DECISION LOG]\nThe following key decisions were made during this project. NEVER contradict these unless the user explicitly asks:\n${combinedDecisions}\n\n---\n\n${augmentedSystem}`;
   }
   
   if (summary) {
@@ -151,12 +151,12 @@ function buildSmartContext(
   }
   
   if (projectContext) {
-    augmentedSystem = `${augmentedSystem}\n\n[PROJECT BLUEPRINT — Current file structure & architecture]\n${projectContext}\n\nWhen modifying or creating files, reference these EXACT paths. Never create files that already exist unless asked to replace them.`;
+    augmentedSystem = `${augmentedSystem}\n\n[PROJECT BLUEPRINT â€” Current file structure & architecture]\n${projectContext}\n\nWhen modifying or creating files, reference these EXACT paths. Never create files that already exist unless asked to replace them.`;
   }
   
   augmentedSystem = `${augmentedSystem}\n\n[CONTEXT NOTE]\nYou are receiving: (1) all key decisions ever made, (2) the current project blueprint, (3) the most important messages from the full conversation history, and (4) all recent messages. You have MORE context than any other AI builder. USE IT.`;
 
-  // ── LAYER 5: Final Token Budget ──
+  // â”€â”€ LAYER 5: Final Token Budget â”€â”€
   const systemTokens = estimateTokens(augmentedSystem);
   const promptTokens = estimateTokens(userPrompt);
   const reservedForResponse = 8192;
@@ -197,15 +197,7 @@ serve(async (req: Request) => {
 
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
     if (authError || !user) {
-      if (stream && typeof result !== "string") {
-      // If streaming, result is a Response object from the LLM
-      // We return it directly. 
-      return new Response(result.body, {
-        headers: { ...corsHeaders, "Content-Type": result.headers.get("Content-Type") || "text/event-stream" }
-      });
-    }
-
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -223,7 +215,7 @@ serve(async (req: Request) => {
 
     const msgArray: { role: string; content: string }[] = Array.isArray(messages) ? messages : [];
 
-    // ─── LOAD DECISION LOG FROM DB ───
+    // â”€â”€â”€ LOAD DECISION LOG FROM DB â”€â”€â”€
     let decisionLog = "";
     if (conversationId) {
       const { data: conv } = await supabaseAdmin
@@ -234,7 +226,7 @@ serve(async (req: Request) => {
       decisionLog = conv?.decision_log || "";
     }
 
-    // ─── BUILD SMART CONTEXT (5-layer system) ───
+    // â”€â”€â”€ BUILD SMART CONTEXT (5-layer system) â”€â”€â”€
     const { augmentedSystem, finalMessages } = buildSmartContext(
       msgArray,
       systemPrompt || "",
@@ -245,7 +237,7 @@ serve(async (req: Request) => {
       prompt,
     );
 
-    // ─── AUTO-DECISION LOG UPDATE ───
+    // â”€â”€â”€ AUTO-DECISION LOG UPDATE â”€â”€â”€
     let newDecisionLog = decisionLog;
     if (conversationId && msgArray.length > 10) {
       const freshDecisions = extractDecisions(msgArray);
@@ -264,7 +256,7 @@ serve(async (req: Request) => {
       }
     }
 
-    // ─── AUTO-SUMMARIZATION ───
+    // â”€â”€â”€ AUTO-SUMMARIZATION â”€â”€â”€
     if (conversationId && msgArray.length > 50) {
       EdgeRuntime.waitUntil(
         autoSummarize(supabaseAdmin, conversationId, user.id, msgArray, modelId).catch((e: Error) =>
@@ -273,7 +265,7 @@ serve(async (req: Request) => {
       );
     }
 
-    // ─── API KEY RESOLUTION ───
+    // â”€â”€â”€ API KEY RESOLUTION â”€â”€â”€
     let apiKey = "";
     let baseUrl = "";
 
@@ -358,6 +350,12 @@ serve(async (req: Request) => {
         });
     }
 
+    if (stream && result instanceof Response) {
+      return new Response(result.body, {
+        headers: { ...corsHeaders, "Content-Type": result.headers.get("Content-Type") || "text/event-stream" },
+      });
+    }
+
     return new Response(JSON.stringify({
       content: result,
       contextPruned: finalMessages.length < msgArray.length,
@@ -377,12 +375,13 @@ serve(async (req: Request) => {
   }
 });
 
-// ─── API CALL FUNCTIONS ───
+// â”€â”€â”€ API CALL FUNCTIONS â”€â”€â”€
 
 async function callOpenAICompatible(
   apiKey: string, baseUrl: string, modelId: string,
   systemPrompt: string, messages: { role: string; content: string }[], userPrompt: string,
-, stream?: boolean): Promise<string | any> {
+  stream?: boolean
+): Promise<string | Response> {
   const modelMap: Record<string, string> = {
     "gpt-4o": "gpt-4o",
     "deepseek-v3": "deepseek-chat",
@@ -410,8 +409,90 @@ async function callOpenAICompatible(
       messages: allMessages,
       max_tokens: 8192,
       temperature: 0.7,
+      stream: !!stream,
     }),
   });
+
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`API error (${res.status}): ${errBody.slice(0, 300)}`);
+  }
+
+  if (stream) return res;
+
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || "";
+}
+
+async function callAnthropic(
+  apiKey: string, baseUrl: string, system: string,
+  messages: { role: string; content: string }[], userPrompt: string,
+  stream?: boolean
+): Promise<string | Response> {
+  const allMessages = [
+    ...messages.map((m) => ({ role: m.role, content: m.content })),
+    { role: "user", content: userPrompt },
+  ];
+
+  const res = await fetch(`${baseUrl}/messages`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-3-5-sonnet-20241022",
+      system,
+      messages: allMessages,
+      max_tokens: 8192,
+      stream: !!stream,
+    }),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`Claude API error (${res.status}): ${errBody.slice(0, 300)}`);
+  }
+
+  if (stream) return res;
+
+  const data = await res.json();
+  return data.content?.[0]?.text || "";
+}
+
+async function callGemini(
+  apiKey: string, systemInstruction: string,
+  messages: { role: string; content: string }[], userPrompt: string,
+  stream?: boolean
+): Promise<string | Response> {
+  const geminiContents = [
+    ...messages.map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }],
+    })),
+    { role: "user", parts: [{ text: userPrompt }] },
+  ];
+
+  const endpoint = stream ? "streamGenerateContent?alt=sse&" : "generateContent?";
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:${endpoint}key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: {
+          role: "user",
+          parts: [{ text: systemInstruction }],
+        },
+        contents: geminiContents,
+        generationConfig: {
+          maxOutputTokens: 8192,
+          temperature: 0.7,
+        },
+      }),
+    }
+  );
 
   if (!res.ok) {
     const errBody = await res.text();
@@ -424,7 +505,7 @@ async function callOpenAICompatible(
   return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 }
 
-// ─── AUTO-SUMMARIZATION ───
+// â”€â”€â”€ AUTO-SUMMARIZATION â”€â”€â”€
 async function autoSummarize(
   supabaseAdmin: any,
   conversationId: string,
