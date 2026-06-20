@@ -8,8 +8,10 @@
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Deploy-Secret",
+  "Access-Control-Allow-Credentials": "true",
+  "Access-Control-Max-Age": "86400",
 };
 
 export default {
@@ -37,20 +39,13 @@ export default {
       return Response.redirect("https://crealityapp.com", 301);
     }
 
-    // Auth check for API endpoints
-    const auth = request.headers.get("Authorization") || "";
-    const secret = env.DEPLOY_SECRET || "";
-    if (secret && !auth.includes(secret)) {
-      return jsonResponse({ error: "Unauthorized" }, 401);
-    }
-
     // API Routes
     if (url.pathname === "/api/deploy" && request.method === "POST") {
       return handleDeploy(request, env);
     }
 
     if (url.pathname === "/api/health" && request.method === "GET") {
-      return jsonResponse({ status: "ok", worker: "kv" }, 200);
+      return jsonResponse({ status: "ok", worker: "kv", timestamp: Date.now() }, 200);
     }
 
     return notFoundPage();
@@ -114,10 +109,26 @@ function getContentType(path) {
 async function handleDeploy(request, env) {
   try {
     const body = await request.json();
-    const { slug, files } = body;
+    const { slug, files, secret } = body;
 
     if (!slug || !files || !Array.isArray(files)) {
       return jsonResponse({ error: "Missing slug or files" }, 400);
+    }
+
+    // Auth check: accept either header or body secret
+    const deploySecret = env.DEPLOY_SECRET || "";
+    const authHeader = request.headers.get("Authorization") || "";
+    const xSecret = request.headers.get("X-Deploy-Secret") || "";
+    
+    // Allow three auth methods: Bearer token, X-Deploy-Secret header, or secret in body
+    const isAuthorized = 
+      !deploySecret || // No secret configured = open access
+      authHeader.includes(deploySecret) ||
+      xSecret === deploySecret ||
+      secret === deploySecret;
+
+    if (!isAuthorized) {
+      return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
     const maxFileSize = 25 * 1024 * 1024; // 25MB
@@ -136,8 +147,7 @@ async function handleDeploy(request, env) {
         return jsonResponse({ error: "Total file size exceeds 25MB" }, 413);
       }
 
-      // Cloudflare KV values are limited to 25MB
-      if (content.length > 25 * 1024 * 1024) {
+      if (content.length > maxFileSize) {
         return jsonResponse({ error: `File ${file.name} exceeds 25MB` }, 413);
       }
 
@@ -154,6 +164,7 @@ async function handleDeploy(request, env) {
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Deploy failed";
+    console.error("CreAIlity Deploy: ", msg, err);
     return jsonResponse({ error: msg }, 500);
   }
 }
