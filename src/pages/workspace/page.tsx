@@ -181,7 +181,6 @@ export default function WorkspacePage() {
       setProject({ ...cached });
       setViewingVersionCode(null);
       setActiveViewingFile("generated");
-      setShowSandbox(false);
     }
   };
 
@@ -266,17 +265,11 @@ export default function WorkspacePage() {
   const handleFileSelect = (file: ImportedFile) => {
     setActiveViewingFile(file.name);
     setViewingVersionCode(null);
-    setShowSandbox(false);
   };
 
   const handleShowGenerated = () => {
     setActiveViewingFile("generated");
     setViewingVersionCode(null);
-    if (!project?.generatedCode && hasSandbox) {
-      setShowSandbox(true);
-    } else {
-      setShowSandbox(false);
-    }
   };
 
   const handleImportFromGitHub = (
@@ -290,7 +283,6 @@ export default function WorkspacePage() {
     });
     setActiveViewingFile(files[0].name);
     setShowGitHub(false);
-    setShowSandbox(true);
   };
 
   const handleExtensionGenerated = (
