@@ -7,6 +7,42 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+async function getPlanLimits(supabaseAdmin: any, planId: string) {
+  // Fallback defaults
+  const defaults: Record<string, { credits: number, builds: number, projects: number }> = {
+    free: { credits: 20, builds: 20, projects: 3 },
+    pro: { credits: 500, builds: 500, projects: 999 },
+    byok: { credits: 0, builds: 9999, projects: 999 },
+    hosting: { credits: 0, builds: 0, projects: 10 },
+  };
+
+  try {
+    const { data } = await supabaseAdmin
+      .from("platform_config")
+      .select("value")
+      .eq("key", "plans_config")
+      .maybeSingle();
+
+    if (data?.value) {
+      const parsed = JSON.parse(data.value);
+      if (Array.isArray(parsed)) {
+        const found = parsed.find((p: any) => p.tier === planId);
+        if (found) {
+          return {
+            credits: found.credits_monthly,
+            builds: found.builds_limit,
+            projects: found.projects_limit,
+          };
+        }
+      }
+    }
+  } catch (e) {
+    console.error("Failed to fetch plans_config inside webhook:", e);
+  }
+
+  return defaults[planId] || defaults.free;
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -57,24 +93,7 @@ serve(async (req: Request) => {
         const subscriptionId = session.subscription as string;
 
         if (userId && planId) {
-          const planCredits: Record<string, number> = {
-            free: 50,
-            pro: 500,
-            byok: 0,
-            hosting: 0,
-          };
-          const planBuilds: Record<string, number> = {
-            free: 20,
-            pro: 500,
-            byok: 9999,
-            hosting: 0,
-          };
-          const planProjects: Record<string, number> = {
-            free: 3,
-            pro: 999,
-            byok: 999,
-            hosting: 10,
-          };
+          const limits = await getPlanLimits(supabaseAdmin, planId);
 
           await supabaseAdmin
             .from("user_plans")
@@ -85,11 +104,11 @@ serve(async (req: Request) => {
               stripe_customer_id: customerId,
               stripe_subscription_id: subscriptionId,
               billing_period: billingPeriod,
-              credits_remaining: planCredits[planId] || 50,
-              credits_monthly: planCredits[planId] || 50,
+              credits_remaining: limits.credits,
+              credits_monthly: limits.credits,
               builds_used_this_month: 0,
-              builds_limit_monthly: planBuilds[planId] || 20,
-              projects_limit: planProjects[planId] || 3,
+              builds_limit_monthly: limits.builds,
+              projects_limit: limits.projects,
               updated_at: new Date().toISOString(),
             }, { onConflict: "user_id" });
 
@@ -132,16 +151,17 @@ serve(async (req: Request) => {
           .maybeSingle();
 
         if (userPlan) {
+          const limits = await getPlanLimits(supabaseAdmin, "free");
           await supabaseAdmin
             .from("user_plans")
             .update({
               plan_tier: "free",
               status: "active",
-              credits_remaining: 50,
-              credits_monthly: 50,
+              credits_remaining: limits.credits,
+              credits_monthly: limits.credits,
               builds_used_this_month: 0,
-              builds_limit_monthly: 20,
-              projects_limit: 3,
+              builds_limit_monthly: limits.builds,
+              projects_limit: limits.projects,
               stripe_subscription_id: null,
               updated_at: new Date().toISOString(),
             })

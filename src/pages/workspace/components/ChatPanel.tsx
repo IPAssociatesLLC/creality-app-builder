@@ -81,6 +81,7 @@ export default function ChatPanel({ onBuildStart, onBuildEnd, onGitHubImport, on
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const inlineDropdownRef = useRef<HTMLDivElement>(null);
+  const lastLoadedIdRef = useRef<string | null>(null);
 
   // Auto-resize textarea as content grows
   const autoResizeTextarea = useCallback(() => {
@@ -108,14 +109,28 @@ export default function ChatPanel({ onBuildStart, onBuildEnd, onGitHubImport, on
 
   useEffect(() => { if (!modeDropdownOpen) return; const handler = (e: MouseEvent) => { if (modeDropdownRef.current && !modeDropdownRef.current.contains(e.target as Node)) setModeDropdownOpen(false); }; document.addEventListener("mousedown", handler); return () => document.removeEventListener("mousedown", handler); }, [modeDropdownOpen]);
 
-  // Load conversation history from Supabase on mount
+  // Load conversation history from Supabase on mount/switch
   useEffect(() => {
-    if (!conversationId || historyLoaded) return;
+    if (!conversationId) return;
+
+    // Reset chat history when conversation ID changes to prevent old history carry-over
+    if (lastLoadedIdRef.current !== conversationId) {
+      setMessages([]);
+      setHistoryLoaded(false);
+      setConversationSummary("");
+      lastLoadedIdRef.current = conversationId;
+      return;
+    }
+
+    if (historyLoaded) return;
+
+    let cancelled = false;
     Promise.all([
       loadConversationMessages(conversationId),
       getConversationSummary(conversationId),
     ]).then(([msgs, summary]) => {
-      if (msgs.length > 0 && messages.length === 0) {
+      if (cancelled) return;
+      if (msgs.length > 0) {
         // Detect if the last assistant message is troubleshooting text (not code)
         // If so, skip loading to give the AI a fresh start
         const lastAssistant = [...msgs].reverse().find((m) => m.role === "assistant");
@@ -124,7 +139,6 @@ export default function ChatPanel({ onBuildStart, onBuildEnd, onGitHubImport, on
         ) && !/```html|```json|```tsx|<!DOCTYPE|<html[\s>]|\{[\s]*"/.test(lastAssistant.content);
 
         if (isStuckTroubleshooting && msgs.length < 6) {
-          // Conversation is stuck in troubleshooting with few messages — start fresh
           console.log("CreAIlity: Detected stuck troubleshooting conversation, starting fresh");
           setHistoryLoaded(true);
           return;
@@ -139,11 +153,17 @@ export default function ChatPanel({ onBuildStart, onBuildEnd, onGitHubImport, on
         }));
         setMessages(chatMsgs);
         onConversationUpdate(msgs);
+      } else {
+        setMessages([]);
       }
       if (summary) setConversationSummary(summary);
       setHistoryLoaded(true);
+    }).catch(() => {
+      if (!cancelled) setHistoryLoaded(true);
     });
-  }, [conversationId]);
+
+    return () => { cancelled = true; };
+  }, [conversationId, historyLoaded]);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, thinking]);
 

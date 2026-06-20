@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import SubPageNavbar from "@/components/feature/SubPageNavbar";
 import Footer from "@/components/feature/Footer";
@@ -123,7 +123,38 @@ export default function PricingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [activePlans, setActivePlans] = useState(plans);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    supabase.from("platform_config").select("key, value").eq("key", "plans_config").maybeSingle().then(({ data }) => {
+      if (data?.value) {
+        try {
+          const parsed = JSON.parse(data.value);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setActivePlans((prev) => prev.map((plan) => {
+              const config = parsed.find((p: any) => p.tier === plan.id);
+              if (config) {
+                return {
+                  ...plan,
+                  price: {
+                    monthly: config.price,
+                    annual: Math.round(config.price * 0.75),
+                  },
+                  credits: config.tier === "byok" ? "Unlimited credits (your keys)" : config.credits_monthly === 0 ? "0 credits (hosting only)" : `${config.credits_monthly} credits / month`,
+                  projects: config.projects_limit >= 999 ? "Unlimited projects" : `${config.projects_limit} projects`,
+                  features: config.features ? config.features.split(",").map((f: string) => f.trim()) : plan.features,
+                };
+              }
+              return plan;
+            }));
+          }
+        } catch (e) {
+          console.error("Error loading plans config:", e);
+        }
+      }
+    });
+  }, []);
 
   const handleCheckout = async (planId: string) => {
     if (planId === "free") {
@@ -199,7 +230,7 @@ export default function PricingPage() {
 
         {/* Pricing cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5 mb-16">
-          {plans.map((plan) => {
+          {activePlans.map((plan) => {
             const isHighlight = plan.highlight;
             const isFree = plan.price.monthly === 0;
             const price = isFree ? 0 : billing === "monthly" ? plan.price.monthly : plan.price.annual;

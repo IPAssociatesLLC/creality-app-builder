@@ -317,7 +317,7 @@ function PlanBillingTab() {
               {plan?.status === "cancelled" && <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" />Cancelled</span>}
             </div>
             <p className="text-xs text-foreground-500 leading-relaxed max-w-md">
-              {tier === "free" && "Free plan with basic AI model and limited builds. Upgrade anytime for more power."}
+              {tier === "free" && "Free plan with basic AI model and limited credits. Upgrade anytime for more power."}
               {tier === "pro" && "Full platform access with all AI models included. Build without limits."}
               {tier === "byok" && "Unlimited everything with your own API keys. Full control over AI costs."}
               {tier === "hosting" && "Host your deployed apps with custom domains. No AI builds included."}
@@ -329,16 +329,7 @@ function PlanBillingTab() {
         </div>
 
         {/* Usage meters */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
-          <div>
-            <div className="flex justify-between items-center mb-1.5">
-              <span className="text-[10px] font-semibold text-foreground-500 uppercase tracking-wider">Credits Used</span>
-              <span className="text-xs font-bold text-foreground-800">{plan?.buildsUsedThisMonth || 0} / {plan?.buildsLimitMonthly || "∞"}</span>
-            </div>
-            <div className="h-1.5 bg-background-200 rounded-full overflow-hidden">
-              <div className={`h-full rounded-full transition-all ${usagePercent > 90 ? "bg-red-500" : usagePercent > 70 ? "bg-amber-500" : "bg-accent-500"}`} style={{ width: `${Math.min(usagePercent, 100)}%` }} />
-            </div>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
           <div>
             <div className="flex justify-between items-center mb-1.5">
               <span className="text-[10px] font-semibold text-foreground-500 uppercase tracking-wider">AI Credits</span>

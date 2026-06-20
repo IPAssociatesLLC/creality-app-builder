@@ -134,6 +134,16 @@ function Badge({ label, color }: { label: string; color: "accent" | "secondary" 
 
 // ── Overview Tab ──
 function OverviewTab({ stats, onTabChange }: { stats: AdminStats; onTabChange: (t: AdminTab) => void }) {
+  const [keys, setKeys] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    supabase.from("platform_config").select("key, value").then(({ data }) => {
+      const map: Record<string, string> = {};
+      (data || []).forEach((row: { key: string; value: string }) => { map[row.key] = row.value; });
+      setKeys(map);
+    });
+  }, []);
+
   const cards = [
     { label: "Total Users", value: stats.totalUsers, sub: `${stats.newSignupsToday} today`, icon: "ri-user-line", color: "accent" as const },
     { label: "Paying Users", value: stats.paidUsers, sub: `${stats.freeUsers} free`, icon: "ri-vip-crown-line", color: "secondary" as const },
@@ -210,9 +220,9 @@ function OverviewTab({ stats, onTabChange }: { stats: AdminStats; onTabChange: (
             {[
               { label: "Supabase Database", ok: true, detail: "Connected" },
               { label: "Auth Service", ok: true, detail: "Running" },
-              { label: "Cloudflare Sandbox", ok: true, detail: "Configured" },
-              { label: "Stripe Payments", ok: false, detail: "Not connected" },
-              { label: "Email Service", ok: false, detail: "Not configured" },
+              { label: "Cloudflare Sandbox", ok: !!keys.CLOUDFLARE_KV_NAMESPACE_ID, detail: keys.CLOUDFLARE_KV_NAMESPACE_ID ? "Configured" : "Not configured" },
+              { label: "Stripe Payments", ok: !!keys.stripe_publishable_key, detail: keys.stripe_publishable_key ? "Connected" : "Not connected" },
+              { label: "Email Service", ok: !!keys.smtp_host, detail: keys.smtp_host ? "Configured" : "Not configured" },
             ].map((s) => (
               <div key={s.label} className="flex items-center justify-between py-2.5 border-b border-background-200/60 last:border-b-0">
                 <div className="flex items-center gap-3">
@@ -223,7 +233,7 @@ function OverviewTab({ stats, onTabChange }: { stats: AdminStats; onTabChange: (
               </div>
             ))}
           </div>
-        </div>
+    </div>
 
         {/* Quick actions */}
         <div className="bg-background-50 border border-background-200/80 rounded-2xl p-6 lg:col-span-2">
@@ -258,11 +268,27 @@ function OverviewTab({ stats, onTabChange }: { stats: AdminStats; onTabChange: (
 // ── Users Tab ──
 function UsersTab() {
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [plansConfig, setPlansConfig] = useState<PlanDef[]>(DEFAULT_PLANS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterPlan, setFilterPlan] = useState<string>("all");
   const [editingUser, setEditingUser] = useState<UserRow | null>(null);
+
+  useEffect(() => {
+    supabase.from("platform_config").select("key, value").eq("key", "plans_config").maybeSingle().then(({ data }) => {
+      if (data?.value) {
+        try {
+          const parsed = JSON.parse(data.value);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setPlansConfig(parsed);
+          }
+        } catch (e) {
+          console.error("Failed to parse plans_config:", e);
+        }
+      }
+    });
+  }, []);
   const [editCredits, setEditCredits] = useState(0);
   const [editPlan, setEditPlan] = useState("free");
   const [addUserEmail, setAddUserEmail] = useState("");
@@ -331,7 +357,17 @@ function UsersTab() {
       const { data, error } = await supabase.auth.admin.createUser({ email: addUserEmail, password: addUserPassword, email_confirm: true });
       if (error) { showMsg(`Error: ${error.message}`, "error"); return; }
       if (data?.user) {
-        await supabase.from("user_plans").insert({ user_id: data.user.id, plan_tier: "free", email: addUserEmail, credits_remaining: 20, credits_monthly: 20, builds_used_this_month: 0, builds_limit_monthly: 20, projects_limit: 3 });
+        const freePlan = plansConfig.find(p => p.tier === "free") || DEFAULT_PLANS.find(p => p.tier === "free")!;
+        await supabase.from("user_plans").insert({
+          user_id: data.user.id,
+          plan_tier: "free",
+          email: addUserEmail,
+          credits_remaining: freePlan.credits_monthly,
+          credits_monthly: freePlan.credits_monthly,
+          builds_used_this_month: 0,
+          builds_limit_monthly: freePlan.builds_limit,
+          projects_limit: freePlan.projects_limit
+        });
         showMsg("User created successfully!");
         setAddUserEmail(""); setAddUserPassword(""); setShowAddUser(false);
         loadUsers();
@@ -833,12 +869,45 @@ function PlansTab() {
   const [editingPlan, setEditingPlan] = useState<PlanDef | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const handleSavePlan = () => {
+  useEffect(() => {
+    supabase.from("platform_config").select("key, value").eq("key", "plans_config").maybeSingle().then(({ data }) => {
+      if (data?.value) {
+        try {
+          const parsed = JSON.parse(data.value);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setPlans(parsed);
+          }
+        } catch (e) {
+          console.error("Failed to parse plans_config:", e);
+        }
+      }
+    });
+  }, []);
+
+  const handleSavePlan = async () => {
     if (!editingPlan) return;
-    setPlans((prev) => prev.map((p) => p.tier === editingPlan.tier ? editingPlan : p));
+    const updatedPlans = plans.map((p) => p.tier === editingPlan.tier ? editingPlan : p);
+    setPlans(updatedPlans);
+    
+    // Save to Supabase platform_config
+    const { data: existing } = await supabase.from("platform_config").select("key").eq("key", "plans_config").maybeSingle();
+    let err = null;
+    const value = JSON.stringify(updatedPlans);
+    if (existing) {
+      const { error } = await supabase.from("platform_config").update({ value }).eq("key", "plans_config");
+      err = error;
+    } else {
+      const { error } = await supabase.from("platform_config").insert({ key: "plans_config", value });
+      err = error;
+    }
+    
     setEditingPlan(null);
-    setMsg("Plan saved");
-    setTimeout(() => setMsg(null), 2000);
+    if (err) {
+      setMsg(`Error saving plans: ${err.message}`);
+    } else {
+      setMsg("Plan saved successfully!");
+    }
+    setTimeout(() => setMsg(null), 3000);
   };
 
   const planColors: Record<string, string> = {
@@ -907,7 +976,7 @@ function PlansTab() {
 
 // ── Settings Tab ──
 function SettingsTab() {
-  const [settings, setSettings] = useState({ platformName: "CreAIlity", maintenanceMode: false, signupsEnabled: true, defaultModel: "gpt-4o" });
+  const [settings, setSettings] = useState({ platformName: "CreAIlity", maintenanceMode: false, signupsEnabled: true, defaultModel: "gpt-4o", stripePublishableKey: "" });
   const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -919,6 +988,7 @@ function SettingsTab() {
         maintenanceMode: map.maintenance_mode === "true",
         signupsEnabled: map.signups_enabled !== "false",
         defaultModel: map.default_model || "gpt-4o",
+        stripePublishableKey: map.stripe_publishable_key || "",
       });
     });
   }, []);
@@ -994,6 +1064,29 @@ function SettingsTab() {
             <button onClick={() => handleToggle("signupsEnabled", settings.signupsEnabled)} className={`w-12 h-6 rounded-full transition-colors relative cursor-pointer flex-shrink-0 ${settings.signupsEnabled ? "bg-secondary-500" : "bg-background-300"}`}>
               <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-all ${settings.signupsEnabled ? "left-6" : "left-0.5"}`} />
             </button>
+          </div>
+        </div>
+        {/* Stripe Settings */}
+        <div className="bg-background-50 border border-background-200/80 rounded-2xl p-5">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-bold text-foreground-800">Stripe Publishable Key</p>
+                <p className="text-xs text-foreground-500 mt-0.5">Used on the frontend for Stripe checkout</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="text" value={settings.stripePublishableKey} onChange={(e) => setSettings({ ...settings, stripePublishableKey: e.target.value })} className="bg-background-100 border border-background-200 rounded-xl px-3 py-2 text-sm text-foreground-800 outline-none w-40 sm:w-60" placeholder="pk_test_..." />
+                <button onClick={() => handleSave("stripe_publishable_key", settings.stripePublishableKey)} className="text-xs font-semibold bg-accent-500 text-background-50 px-3 py-2 rounded-xl hover:bg-accent-500/90 transition-colors cursor-pointer whitespace-nowrap">Save</button>
+              </div>
+            </div>
+            <div className="pt-3 border-t border-background-200">
+              <p className="text-xs font-bold text-foreground-800 mb-1">Stripe Webhook URL</p>
+              <p className="text-xs text-foreground-500 mb-2">Configure this URL in your Stripe Dashboard to receive subscription webhook events:</p>
+              <div className="flex items-center gap-2">
+                <input type="text" readOnly value="https://qyyfygcflzyfucypmfeu.supabase.co/functions/v1/stripe-webhook" className="bg-background-100 border border-background-200 rounded-xl px-3 py-2 text-xs text-foreground-600 outline-none w-full cursor-text select-all" />
+                <button onClick={() => { navigator.clipboard.writeText("https://qyyfygcflzyfucypmfeu.supabase.co/functions/v1/stripe-webhook"); setMsg("Copied Webhook URL!"); setTimeout(() => setMsg(null), 2000); }} className="text-xs font-semibold bg-background-200 text-foreground-700 px-3 py-2 rounded-xl hover:bg-background-300 transition-colors cursor-pointer whitespace-nowrap"><i className="ri-file-copy-line mr-1" />Copy</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
