@@ -73,14 +73,42 @@ export function buildSandboxHtml(files: ImportedFile[]): BundledResult | null {
   const hasSupabase = sourceFiles.some((f) => f.content.includes("@supabase/supabase-js") || f.content.includes("supabase.co"));
   const hasLucide = sourceFiles.some((f) => f.content.includes("lucide-react"));
 
-  // Sort files: entry file last (so dependencies are defined first)
-  const entryPatterns = ["main.", "index.", "app.", "App."];
+  // Helper to determine if a file is a main entry point (root or src root)
+  const isMainEntry = (path: string) => {
+    const normalized = path.replace(/\\/g, "/");
+    const parts = normalized.split("/");
+    const filename = parts.pop() || "";
+    const base = filename.split(".")[0].toLowerCase();
+    
+    if (!["app", "index", "main"].includes(base)) return false;
+    
+    // Only count as main entry if it's at the root or directly in "src"
+    if (parts.length === 0) return true;
+    if (parts.length === 1 && (parts[0] === "src" || parts[0] === "." || parts[0] === "")) return true;
+    
+    return false;
+  };
+
+  // Sort files: components and utilities first, then App, then main/index entry points last
+  const entryOrder = ["app", "index", "main"];
   const sortedSourceFiles = [...sourceFiles].sort((a, b) => {
-    const aIsEntry = entryPatterns.some((p) => a.name.toLowerCase().includes(p.toLowerCase()));
-    const bIsEntry = entryPatterns.some((p) => b.name.toLowerCase().includes(p.toLowerCase()));
-    if (aIsEntry && !bIsEntry) return 1;
-    if (!aIsEntry && bIsEntry) return -1;
-    return 0;
+    const aName = a.name.split("/").pop() || "";
+    const bName = b.name.split("/").pop() || "";
+    const aBase = aName.split(".")[0].toLowerCase();
+    const bBase = bName.split(".")[0].toLowerCase();
+
+    const isAMain = isMainEntry(a.name);
+    const isBMain = isMainEntry(b.name);
+
+    const aOrder = isAMain ? entryOrder.indexOf(aBase) : -1;
+    const bOrder = isBMain ? entryOrder.indexOf(bBase) : -1;
+
+    if (aOrder !== -1 && bOrder !== -1) {
+      return aOrder - bOrder;
+    }
+    if (aOrder !== -1) return 1;
+    if (bOrder !== -1) return -1;
+    return a.name.localeCompare(b.name);
   });
 
   // Transform source files into bundle-ready code
@@ -215,9 +243,9 @@ function transformSourceFile(content: string, fileName: string): string {
       const namedImports = importsClause.match(/\{([^}]+)\}/);
       if (namedImports) {
         const cleaned = namedImports[1].split(",").map(s => s.trim()).filter(Boolean);
-        return `const { ${cleaned.join(", ")} } = LucideReact;`;
+        return `const { ${cleaned.join(", ")} } = (window.LucideReact || window.lucide || {});`;
       }
-      return `const LucideReactGlobal = LucideReact;`;
+      return `const LucideReactGlobal = (window.LucideReact || window.lucide || {});`;
     }
   );
 
@@ -277,7 +305,7 @@ function transformSourceFile(content: string, fileName: string): string {
 
   // ── Remove local and aliased file imports (dependencies are concatenated) ──
   result = result.replace(
-    /import\s+(?:type\s+)?(?:\{[^}]*\}|\w+|\*\s+as\s+\w+)?\s*(?:,\s*(?:\{[^}]*\}|\w+))?\s*from\s*['"](?:\.\.?\/|@\/)[^'"]+['"];?\s*/g,
+    /import\s+(?:type\s+)?(?:\{[^}]*\}|\w+|\*\s+as\s+\w+)?\s*(?:,\s*(?:\{[^}]*\}|\w+))?\s*from\s*['"](?:\.\.?\/|@\/|src\/)[^'"]+['"];?\s*/g,
     "",
   );
 
@@ -325,6 +353,95 @@ function buildCompositeHtml(
 
   // Inject CDN scripts into <head>
   const headScripts: string[] = [];
+
+  // ── Error Interceptor Script ──
+  // Intercepts unhandled exceptions and console.errors (like Babel/React crashes)
+  // to display a friendly runtime error banner directly inside the preview iframe.
+  headScripts.push(`
+  <script>
+  (function() {
+    window.addEventListener('error', function(event) {
+      showError(event.error || { message: event.message, stack: '' });
+    });
+    window.addEventListener('unhandledrejection', function(event) {
+      showError(event.reason || { message: 'Unhandled Promise Rejection', stack: '' });
+    });
+
+    var originalConsoleError = console.error;
+    console.error = function() {
+      originalConsoleError.apply(console, arguments);
+      var args = Array.prototype.slice.call(arguments);
+      var message = args.map(function(arg) {
+        if (arg && arg.message) return arg.message + (arg.stack ? '\\n' + arg.stack : '');
+        return typeof arg === 'object' ? JSON.stringify(arg) : String(arg);
+      }).join(' ');
+      
+      if (message.toLowerCase().includes('babel') || message.toLowerCase().includes('error') || message.toLowerCase().includes('exception')) {
+        showError({ message: message, stack: 'Captured from console.error' });
+      }
+    };
+
+    function showError(err) {
+      var existing = document.getElementById('sandbox-error-banner');
+      if (existing) {
+        var pre = existing.querySelector('pre');
+        if (pre && !pre.innerText.includes(err.message || err)) {
+          pre.innerText += '\\n\\n-------------------\\n\\n' + (err.message || err);
+        }
+        return;
+      }
+
+      var container = document.createElement('div');
+      container.id = 'sandbox-error-banner';
+      container.style.position = 'fixed';
+      container.style.inset = '0';
+      container.style.background = '#0f0a0a';
+      container.style.color = '#f87171';
+      container.style.padding = '20px';
+      container.style.fontFamily = 'monospace';
+      container.style.fontSize = '13px';
+      container.style.lineHeight = '1.6';
+      container.style.zIndex = '999999';
+      container.style.overflow = 'auto';
+
+      var title = document.createElement('h3');
+      title.innerText = '⚠️ Sandbox Runtime / Build Error';
+      title.style.margin = '0 0 12px 0';
+      title.style.color = '#ef4444';
+      title.style.fontSize = '16px';
+      title.style.fontWeight = 'bold';
+      container.appendChild(title);
+
+      var pre = document.createElement('pre');
+      pre.style.background = '#1a1313';
+      pre.style.padding = '12px';
+      pre.style.borderRadius = '6px';
+      pre.style.border = '1px solid rgba(248, 113, 113, 0.2)';
+      pre.style.overflowX = 'auto';
+      pre.style.margin = '0';
+      pre.style.color = '#fca5a5';
+      pre.style.whiteSpace = 'pre-wrap';
+      pre.innerText = (err.message || err) + (err.stack ? '\\n' + err.stack : '');
+      container.appendChild(pre);
+
+      var tip = document.createElement('p');
+      tip.style.margin = '12px 0 0 0';
+      tip.style.color = '#9ca3af';
+      tip.style.fontSize = '11px';
+      tip.innerText = 'Tip: Check the code for syntax issues, import errors, or incorrect named exports.';
+      container.appendChild(tip);
+
+      if (document.body) {
+        document.body.appendChild(container);
+      } else {
+        document.addEventListener('DOMContentLoaded', function() {
+          document.body.appendChild(container);
+        });
+      }
+    }
+  })();
+  </script>
+  `);
 
   // Tailwind CDN must come first so styles are available immediately
   if (hasTailwind) {

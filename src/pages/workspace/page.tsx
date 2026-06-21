@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { supabase } from "@/lib/supabase";
 import TopBar from "./components/TopBar";
 import Sidebar from "./components/Sidebar";
 import ChatPanel from "./components/ChatPanel";
@@ -165,6 +166,65 @@ export default function WorkspacePage() {
     []
   );
 
+  const autoDeployToCloudflare = async (proj: Project) => {
+    // If it's a multi-file project and has files, or a single-file project with generatedCode
+    let filesToDeploy = proj.importedFiles && proj.importedFiles.length > 0
+      ? proj.importedFiles.map(f => ({ name: f.name, content: f.content }))
+      : proj.generatedCode
+      ? [{ name: "index.html", content: proj.generatedCode }]
+      : [];
+
+    if (filesToDeploy.length === 0) return;
+
+    // Compile using in-browser builder if it has React/TypeScript files
+    const hasReactOrTs = filesToDeploy.some(f => f.name.endsWith(".tsx") || f.name.endsWith(".ts"));
+    if (hasReactOrTs) {
+      const bundle = buildSandboxHtml(proj.importedFiles || []);
+      if (bundle?.html) {
+        filesToDeploy = [
+          ...filesToDeploy.filter(f => f.name !== "index.html" && f.name !== "/index.html"),
+          { name: "index.html", content: bundle.html }
+        ];
+      }
+    }
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token || "";
+      if (!token) return;
+
+      const supabaseUrl = "https://qyyfygcflzyfucypmfeu.supabase.co";
+      const res = await fetch(`${supabaseUrl}/functions/v1/publish-sandbox`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          projectId: proj.id,
+          files: filesToDeploy,
+          projectName: proj.name,
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.slug) {
+          setProject(prev => {
+            if (prev && prev.id === proj.id) {
+              const updated = { ...prev, previewSlug: data.slug };
+              saveProject(updated).catch(console.error);
+              return updated;
+            }
+            return prev;
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("Auto-deploy failed:", e);
+    }
+  };
+
   const handleProjectNameChange = (name: string) => {
     persistProject({ name });
   };
@@ -233,6 +293,7 @@ export default function WorkspacePage() {
       freshProject.importedFiles = updatedFiles;
       await saveProject(freshProject);
       setProject({ ...freshProject });
+      autoDeployToCloudflare(freshProject);
       setViewingVersionCode(null);
       setActiveViewingFile("index.html");
     } else {
@@ -243,6 +304,7 @@ export default function WorkspacePage() {
       freshProject.generatedCode = code;
       await saveProject(freshProject);
       setProject({ ...freshProject });
+      autoDeployToCloudflare(freshProject);
       setViewingVersionCode(null);
       setActiveViewingFile("generated");
     }
@@ -403,16 +465,22 @@ export default function WorkspacePage() {
     const freshProject = await loadProject(project.id);
     if (!freshProject) return;
 
-    // Merge files
+    // Merge files (supporting deletes if file content is null/empty)
     const existingFiles = freshProject.importedFiles || [];
-    const mergedFiles = [...existingFiles];
+    let mergedFiles = [...existingFiles];
     
     for (const newFile of files) {
       const idx = mergedFiles.findIndex(f => f.name === newFile.name);
-      if (idx >= 0) {
-        mergedFiles[idx] = newFile;
+      if (newFile.content === null || newFile.content === "") {
+        if (idx >= 0) {
+          mergedFiles.splice(idx, 1);
+        }
       } else {
-        mergedFiles.push(newFile);
+        if (idx >= 0) {
+          mergedFiles[idx] = newFile;
+        } else {
+          mergedFiles.push(newFile);
+        }
       }
     }
 
@@ -422,6 +490,7 @@ export default function WorkspacePage() {
     freshProject.name = mergedFiles.length > 0 ? (isReact ? "React App" : "Website") : freshProject.name;
     await saveProject(freshProject);
     setProject({ ...freshProject });
+    autoDeployToCloudflare(freshProject);
     if (files.length > 0) {
       setActiveViewingFile(files[0].name);
     }
@@ -699,17 +768,23 @@ export default function WorkspacePage() {
                     f.name === activeViewingFile ? { ...f, content: code } : f
                   );
                   await saveVersion(project.id, JSON.stringify(updatedFiles), `Edit ${activeViewingFile}`, "code editor");
-                  await saveProject({ ...project, importedFiles: updatedFiles });
-                  setProject((prev) => prev ? { ...prev, importedFiles: updatedFiles } : prev);
+                  const updatedProject = { ...project, importedFiles: updatedFiles };
+                  await saveProject(updatedProject);
+                  setProject(updatedProject);
+                  autoDeployToCloudflare(updatedProject);
                 } else {
                   await saveVersion(project.id, code, "Manual edit", "code editor");
                   const updated = await loadProject(project.id);
-                  if (updated) setProject({ ...updated, generatedCode: code });
+                  if (updated) {
+                    setProject({ ...updated, generatedCode: code });
+                    autoDeployToCloudflare({ ...updated, generatedCode: code });
+                  }
                 }
               }}
               isExtensionFile={isExtensionFile}
               fileName={activeViewingFile && activeViewingFile !== "generated" ? activeViewingFile : undefined}
               sandboxHtml={sandboxHtml}
+              projectSlug={project?.previewSlug || project?.id}
             />
           </div>
         )}

@@ -88,6 +88,30 @@ serve(async (req: Request) => {
       });
     }
 
+    // Resolve credentials dynamically from Deno env or platform_config database table
+    let accountId = Deno.env.get("CLOUDFLARE_ACCOUNT_ID") || "";
+    let apiToken = Deno.env.get("CLOUDFLARE_API_TOKEN") || "";
+    let workerSecret = Deno.env.get("CLOUDFLARE_WORKER_SECRET") || "";
+    let workerUrl = Deno.env.get("CLOUDFLARE_WORKER_URL") || "";
+
+    const { data: configRows } = await supabaseAdmin
+      .from("platform_config")
+      .select("key, value")
+      .in("key", ["cloudflare_account_id", "cloudflare_api_token", "cloudflare_worker_secret", "CLOUDFLARE_WORKER_URL"]);
+
+    if (configRows) {
+      const configMap: Record<string, string> = {};
+      configRows.forEach((r) => { configMap[r.key] = r.value; });
+      if (!accountId && configMap["cloudflare_account_id"]) accountId = configMap["cloudflare_account_id"];
+      if (!apiToken && configMap["cloudflare_api_token"]) apiToken = configMap["cloudflare_api_token"];
+      if (!workerSecret && configMap["cloudflare_worker_secret"]) workerSecret = configMap["cloudflare_worker_secret"];
+      if (!workerUrl && configMap["CLOUDFLARE_WORKER_URL"]) workerUrl = configMap["CLOUDFLARE_WORKER_URL"];
+    }
+
+    if (!workerUrl) {
+      workerUrl = "https://deploy.crealityapp.com";
+    }
+
     const baseSlug = (customSlug || projectName || project.name || "app")
       .replace(/\s+/g, "-")
       .toLowerCase()
@@ -110,7 +134,7 @@ serve(async (req: Request) => {
 
     let deployUrl = `https://${finalSlug}.crealityapp.com`;
 
-    if (CLOUDFLARE_ACCOUNT_ID && CLOUDFLARE_API_TOKEN && kvNamespaceId) {
+    if (accountId && apiToken && kvNamespaceId) {
       // ── Direct KV write via Cloudflare API ──
       const maxTotalSize = 25 * 1024 * 1024; // 25MB
 
@@ -126,7 +150,7 @@ serve(async (req: Request) => {
           });
         }
 
-        await putKV(CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN, kvNamespaceId, key, content);
+        await putKV(accountId, apiToken, kvNamespaceId, key, content);
       }
 
       // Ensure index.html exists
@@ -134,13 +158,10 @@ serve(async (req: Request) => {
       if (!hasIndex && files.length === 1) {
         const f = files[0];
         const content = typeof f.content === "string" ? f.content : JSON.stringify(f.content);
-        await putKV(CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN, kvNamespaceId, `app:${finalSlug}:/index.html`, content);
+        await putKV(accountId, apiToken, kvNamespaceId, `app:${finalSlug}:/index.html`, content);
       }
     } else {
       // ── Fallback: deploy via the Cloudflare Worker API ──
-      const workerUrl = Deno.env.get("CLOUDFLARE_WORKER_URL") || "";
-      const workerSecret = Deno.env.get("CLOUDFLARE_WORKER_SECRET") || "";
-
       if (workerUrl && workerSecret) {
         const deployRes = await fetch(`${workerUrl}/api/deploy`, {
           method: "POST",

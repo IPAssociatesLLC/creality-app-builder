@@ -1,6 +1,11 @@
 import { supabase } from "@/lib/supabase";
 import { loadUserSettings, saveUserSetting } from "@/utils/user-settings-store";
-import { WEB_APP_SYSTEM_PROMPT, REACT_APP_SYSTEM_PROMPT, BROWSER_EXTENSION_SYSTEM_PROMPT } from "@/utils/prompts";
+import {
+  WEB_APP_SYSTEM_PROMPT,
+  BROWSER_EXTENSION_SYSTEM_PROMPT,
+  REACT_APP_SYSTEM_PROMPT,
+  IMPORT_EDIT_SYSTEM_PROMPT
+} from "@/utils/prompts";
 
 export type BuildMode = "web-app" | "browser-extension" | "react-app" | "import-edit";
 
@@ -10,75 +15,6 @@ export interface ConversationMessage {
 }
 
 
-
-
-const IMPORT_EDIT_SYSTEM_PROMPT = `You are CreAIlity — an elite software engineer specialized in understanding, modifying, and enhancing existing codebases. The user is providing an existing project (from GitHub, ZIP upload, or pasted code) and wants you to analyze it and make specific changes.
-
-═══════════════════════════════════════
-YOUR JOB
-═══════════════════════════════════════
-1. UNDERSTAND the existing codebase thoroughly — its architecture, patterns, tech stack, and conventions
-2. PRESERVE everything that works — never break existing functionality
-3. MATCH the existing code style — naming, indentation, patterns, component structure
-4. MAKE only the changes the user requests — don't refactor or "improve" things they didn't ask about
-5. EXPLAIN what you changed and why — be transparent about modifications
-
-───────────────────────────────────────
-WORKFLOW
-───────────────────────────────────────
-
-When given existing code:
-- First, mentally map the project: entry point → component tree → data flow → routing → styling
-- Identify the tech stack: framework version, build tools, CSS approach, state management
-- Note the coding conventions: naming (camelCase/PascalCase/snake_case), file organization, import patterns
-- Only then make the requested changes
-
-When modifying files:
-- Return the COMPLETE file, not just changed sections
-- Keep all existing imports, exports, and comments intact
-- Add new code following the existing patterns
-- If adding new files: match the directory structure and naming conventions
-- If adding dependencies: use versions compatible with existing ones
-
-When the project has multiple files:
-- Return ALL files (changed and unchanged) in the output
-- This ensures the user has a complete, working project
-- Mark which files were modified in a brief summary (as an HTML comment in the first file)
-
-───────────────────────────────────────
-OUTPUT FORMAT
-───────────────────────────────────────
-For ALL React apps, multi-file projects, and IMPORT/EDIT mode, you MUST use this exact JSON format:
-\`\`\`json
-{
-  "src/App.tsx": "import React from 'react';...",
-  "src/components/Header.tsx": "export function Header() {...}",
-  "src/index.css": "@tailwind base;...",
-  "package.json": "{...}"
-}
-\`\`\`
-CRITICAL: The output MUST contain a single JSON object with your files. Keys are file paths, values are the raw code strings.
-You may briefly explain your thought process or design decisions BEFORE providing the JSON code block.
-
-For simple single-file HTML apps (only if specifically requested as a basic web page), output standard HTML:
-\`\`\`html <!DOCTYPE html> ... \`\`\`
-
-For browser extensions: extension JSON format
-\`\`\`json { "manifest.json": "...", "popup/popup.html": "...", ... } \`\`\`
-
-───────────────────────────────────────
-CRITICAL RULES
-───────────────────────────────────────
-- NEVER collapse a multi-file project into a single file. Maintain the exact file structure shown in the blueprint.
-- NEVER remove or break existing functionality unless explicitly asked
-- NEVER change the tech stack or introduce new frameworks without permission
-- NEVER delete files unless told to
-- MATCH the existing design system — colors, fonts, spacing, component patterns
-- If the existing code has bugs, FIX THEM but note the fix
-- Keep the same level of code quality or improve it
-- Always return complete, working files`;
-
-// ─── Public API ────────────────────────────────────────────────
 
 export interface SelectedModel {
   modelId: string;
@@ -261,103 +197,17 @@ export interface ExtensionFile {
   language: string;
 }
 
-/**
- * Robustly extract a JSON object or array from text by counting braces.
- * Handles code blocks (```json ... ```) and raw JSON with nested braces in string values.
- */
-function extractJsonFromText(text: string): string | null {
-  // Try to find a JSON block delimiter first
-  const blockStart = text.match(/```(?:json)?\s*([\[\{])/);
-  let startChar: string | null = blockStart ? blockStart[1] : null;
-  let endChar: string | null = startChar === '[' ? ']' : startChar === '{' ? '}' : null;
-  
-  let startIdx: number;
-  if (startChar && endChar && blockStart) {
-    startIdx = blockStart.index! + blockStart[0].length - 1;
-  } else {
-    // No code block — try raw JSON at start of text
-    const rawMatch = text.match(/^\s*([\[\{])/);
-    if (!rawMatch) return null;
-    startChar = rawMatch[1];
-    endChar = startChar === '[' ? ']' : startChar === '{' ? '}' : null;
-    if (!endChar) return null;
-    startIdx = rawMatch.index! + rawMatch[0].length - 1;
-  }
-  
-  // Scan forward counting depth
-  let depth = 0;
-  let inString = false;
-  let escapeNext = false;
-  
-  for (let i = startIdx; i < text.length; i++) {
-    const ch = text[i];
-    
-    if (escapeNext) { escapeNext = false; continue; }
-    if (ch === '\\' && inString) { escapeNext = true; continue; }
-    if (ch === '"' && !escapeNext) { inString = !inString; continue; }
-    
-    if (!inString) {
-      if (ch === startChar) depth++;
-      else if (ch === endChar) {
-        depth--;
-        if (depth === 0) return text.slice(startIdx, i + 1);
-      }
-    }
-  }
-  
-  return null;
-}
-
-function parseFilesFromJson(parsed: unknown): ExtensionFile[] | null {
-  if (Array.isArray(parsed)) {
-    const files: ExtensionFile[] = [];
-    for (const item of parsed) {
-      if (typeof item === "object" && item !== null && "name" in item && "content" in item) {
-        const obj = item as Record<string, unknown>;
-        const name = String(obj.name);
-        const content = String(obj.content);
-        const lang = String(obj.language || "");
-        const ext = name.split(".").pop()?.toLowerCase() || "";
-        const langMap: Record<string, string> = {
-          json: "json", js: "javascript", jsx: "javascript",
-          ts: "typescript", tsx: "typescript",
-          html: "html", css: "css", md: "markdown",
-        };
-        files.push({ name, content, language: lang || langMap[ext] || "plaintext" });
-      }
-    }
-    return files.length > 0 ? files : null;
-  }
-
-  if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-    const files: ExtensionFile[] = [];
-    for (const [filename, content] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof content !== "string") continue;
-      const ext = filename.split(".").pop()?.toLowerCase() || "";
-      const langMap: Record<string, string> = {
-        json: "json", js: "javascript", jsx: "javascript",
-        ts: "typescript", tsx: "typescript",
-        html: "html", css: "css", md: "markdown",
-      };
-      files.push({ name: filename, content, language: langMap[ext] || "plaintext" });
-    }
-    return files.length > 0 ? files : null;
-  }
-
-  return null;
-}
-
 export function extractExtensionFiles(text: string): ExtensionFile[] | null {
   // Strategy 1: explicit ```json block
-  let match = text.match(/```(?:json)?\s*((?:\[[\s\S]*?\]|\{[\s\S]*?\}))\s*```/);
+  let match = text.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
   
   // Strategy 2: json inside generic code block
-  if (!match) match = text.match(/```\s*((?:\[[\s\S]*?\]|\{[\s\S]*?\}))\s*```/);
+  if (!match) match = text.match(/```\s*(\{[\s\S]*?\})\s*```/);
   
   // Strategy 3: raw JSON object at start of text
   // Strategy 4: per-file code blocks (e.g. ```tsx:src/App.tsx ... ```)
   if (!match) {
-    const fileBlockRegex = /```(?:(\w+)(?::([^\n]+))?)?\s*\n([\s\S]*?)```/g;
+    const fileBlockRegex = /```(?:(\w+)(?::([^\n]+))?)?\\s*\n([\s\S]*?)```/g;
     const files: ExtensionFile[] = [];
     let fbMatch: RegExpExecArray | null;
     while ((fbMatch = fileBlockRegex.exec(text)) !== null) {
@@ -390,25 +240,28 @@ export function extractExtensionFiles(text: string): ExtensionFile[] | null {
   }
   
   if (!match) {
-    // Try raw JSON array [...] in text
-    const arrStart = text.indexOf("[");
-    const arrEnd = text.lastIndexOf("]");
-    if (arrStart !== -1 && arrEnd !== -1 && arrEnd > arrStart) {
+    const startIdx = text.indexOf("{");
+    const endIdx = text.lastIndexOf("}");
+    if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
       try {
-        const parsed = JSON.parse(text.slice(arrStart, arrEnd + 1));
-        const files = parseFilesFromJson(parsed);
-        if (files) return files;
-      } catch { /* fall through */ }
-    }
-    // Try raw JSON object {...} in text
-    const objStart = text.indexOf("{");
-    const objEnd = text.lastIndexOf("}");
-    if (objStart !== -1 && objEnd !== -1 && objEnd > objStart) {
-      try {
-        const parsed = JSON.parse(text.slice(objStart, objEnd + 1));
-        const files = parseFilesFromJson(parsed);
-        if (files) return files;
-      } catch { /* fall through */ }
+        const parsed = JSON.parse(text.slice(startIdx, endIdx + 1));
+        if (typeof parsed === "object" && !Array.isArray(parsed)) {
+          const files: ExtensionFile[] = [];
+          for (const [filename, content] of Object.entries(parsed)) {
+            if (typeof content !== "string") continue;
+            const ext = filename.split(".").pop()?.toLowerCase() || "";
+            const langMap: Record<string, string> = {
+              json: "json", js: "javascript", jsx: "javascript",
+              ts: "typescript", tsx: "typescript",
+              html: "html", css: "css", md: "markdown",
+            };
+            files.push({ name: filename, content, language: langMap[ext] || "plaintext" });
+          }
+          return files.length > 0 ? files : null;
+        }
+      } catch {
+        // fall through to null
+      }
     }
   }
 
@@ -417,9 +270,29 @@ export function extractExtensionFiles(text: string): ExtensionFile[] | null {
 
   try {
     const parsed = JSON.parse(jsonStr);
-    const files = parseFilesFromJson(parsed);
-    if (files) return files;
-    return null;
+    if (typeof parsed !== "object" || Array.isArray(parsed)) return null;
+
+    const files: ExtensionFile[] = [];
+    for (const [filename, content] of Object.entries(parsed)) {
+      if (typeof content !== "string") continue;
+      const ext = filename.split(".").pop()?.toLowerCase() || "";
+      const langMap: Record<string, string> = {
+        json: "json",
+        js: "javascript",
+        jsx: "javascript",
+        ts: "typescript",
+        tsx: "typescript",
+        html: "html",
+        css: "css",
+        md: "markdown",
+      };
+      files.push({
+        name: filename,
+        content,
+        language: langMap[ext] || "plaintext",
+      });
+    }
+    return files.length > 0 ? files : null;
   } catch {
     console.warn("CreAIlity: Failed to parse AI response as multi-file JSON. Response starts with:", text.slice(0, 200));
     return null;

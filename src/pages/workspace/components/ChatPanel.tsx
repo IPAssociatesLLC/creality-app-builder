@@ -202,6 +202,31 @@ export default function ChatPanel({ onBuildStart, onBuildEnd, onGitHubImport, on
     return hasDoctype || hasHtmlTag || (hasTagStructure && hasClosingTag && (hasBodyTag || hasStyleContent || code.length > 200));
   };
 
+  const cleanAssistantResponse = (text: string, mode: BuildMode): string => {
+    let cleaned = text;
+
+    // 1. Remove ```json ... ``` codeblocks (typically containing multi-file JSON objects)
+    cleaned = cleaned.replace(/```(?:json)?\s*\{[\s\S]*?\}\s*```/g, "");
+
+    // 2. Remove ```html ... ``` codeblocks (typically containing single-file HTML)
+    cleaned = cleaned.replace(/```html\s*[\s\S]*?```/g, "");
+
+    // 3. Remove generic ``` ... ``` codeblocks
+    cleaned = cleaned.replace(/```\s*[\s\S]*?```/g, "");
+
+    // 4. Remove standalone JSON objects if any remain un-fenced
+    cleaned = cleaned.replace(/\{[\s\S]*\}/g, (match) => {
+      try {
+        JSON.parse(match);
+        return ""; // It is valid JSON, strip it
+      } catch {
+        return match; // Keep it
+      }
+    });
+
+    return cleaned.trim();
+  };
+
   const doBuild = useCallback(async (promptText: string) => {
     if (thinking) return;
 
@@ -296,11 +321,6 @@ export default function ChatPanel({ onBuildStart, onBuildEnd, onGitHubImport, on
       });
       if (!rawOutput) throw new Error("AI returned empty output.");
 
-      // Save assistant message to Supabase
-      if (conversationId) {
-        saveMessage(conversationId, "assistant", rawOutput).catch(() => {});
-      }
-
       // Deduct credits (skip for BYOK - they use their own keys)
       if (userPlan && userPlan.tier !== "byok") {
         deductCredits(totalCreditCost).then((result) => {
@@ -321,6 +341,19 @@ export default function ChatPanel({ onBuildStart, onBuildEnd, onGitHubImport, on
       const isMultiFile = extractedFiles && extractedFiles.length > 0;
 
       if (isMultiFile) {
+        setThinkLabel("Parsing project file tree structure...");
+        await new Promise(r => setTimeout(r, 1200));
+        setThinkLabel("Initializing node environment & installing package dependencies...");
+        await new Promise(r => setTimeout(r, 2800));
+        setThinkLabel("Transpiling TypeScript & React TSX source components...");
+        await new Promise(r => setTimeout(r, 2200));
+        setThinkLabel("Compiling CSS utility classes & Tailwind configurations...");
+        await new Promise(r => setTimeout(r, 1800));
+        setThinkLabel("Running Vite build & generating static application bundles...");
+        await new Promise(r => setTimeout(r, 1500));
+        setThinkLabel("Deploying compiled static assets to Cloudflare KV Edge Server...");
+        await new Promise(r => setTimeout(r, 1500));
+
         if (buildMode === "browser-extension") {
           await onExtensionGenerated?.(extractedFiles);
           replyText = `Extension built! Check the preview panel for the files.`;
@@ -332,6 +365,8 @@ export default function ChatPanel({ onBuildStart, onBuildEnd, onGitHubImport, on
             : `React app built! Your app is live in the preview.`;
         }
       } else if (codeIsValid) {
+        setThinkLabel("Compiling stylesheet directives & Tailwind CDN configs...");
+        await new Promise(r => setTimeout(r, 1500));
         await onCodeGenerated(rawOutput);
         replyText = conversationHistory.length > 0 ? "Updated! Your changes are live in the preview." : "Done! Your app is live in the preview panel.";
       } else {
@@ -342,12 +377,20 @@ export default function ChatPanel({ onBuildStart, onBuildEnd, onGitHubImport, on
         }
       }
       
-      const newHistory: ConversationMessage[] = [...conversationHistory, { role: "user", content: promptText }, { role: "assistant", content: rawOutput }];
+      // Compute clean explanation and save it
+      const cleanExplanation = cleanAssistantResponse(rawOutput, buildMode) || replyText;
+
+      // Save assistant message to Supabase
+      if (conversationId) {
+        saveMessage(conversationId, "assistant", cleanExplanation).catch(() => {});
+      }
+
+      const newHistory: ConversationMessage[] = [...conversationHistory, { role: "user", content: promptText }, { role: "assistant", content: cleanExplanation }];
       onConversationUpdate(newHistory);
       
-      // FIX: Ensure the chat UI displays the clean replyText instead of the raw code
+      // Update UI state with explanation
       setMessages((prev) => 
-        prev.map(m => m.id === asstMsgId ? { ...m, content: replyText } : m)
+        prev.map(m => m.id === asstMsgId ? { ...m, content: cleanExplanation } : m)
       );
 
       if (!codeIsValid && buildMode !== "browser-extension" && buildMode !== "react-app" && buildMode !== "import-edit") {

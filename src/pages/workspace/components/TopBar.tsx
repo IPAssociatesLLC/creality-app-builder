@@ -287,7 +287,7 @@ export default function TopBar({ projectName, onProjectNameChange, isBuilding, g
     if (!user) return;
     supabase.from("user_plans").select("is_admin").eq("user_id", user.id).maybeSingle().then(({ data }) => {
       if (data?.is_admin) setIsAdmin(true);
-    }).catch(() => {});
+    });
   }, [user]);
 
   return (

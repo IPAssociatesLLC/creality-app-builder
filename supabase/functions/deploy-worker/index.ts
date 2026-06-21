@@ -40,8 +40,21 @@ serve(async (req: Request) => {
     const body: DeployRequest = await req.json();
     const { accountId: bodyAccountId, apiToken: bodyToken, action = "setup" } = body;
 
-    const accountId = bodyAccountId || Deno.env.get("CLOUDFLARE_ACCOUNT_ID") || "";
-    const apiToken = bodyToken || Deno.env.get("CLOUDFLARE_API_TOKEN") || "";
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const sb = createClient(supabaseUrl, supabaseServiceKey);
+
+    let accountId = bodyAccountId || Deno.env.get("CLOUDFLARE_ACCOUNT_ID") || "";
+    let apiToken = bodyToken || Deno.env.get("CLOUDFLARE_API_TOKEN") || "";
+
+    if (!accountId) {
+      const { data } = await sb.from("platform_config").select("value").eq("key", "cloudflare_account_id").maybeSingle();
+      if (data?.value) accountId = data.value;
+    }
+    if (!apiToken) {
+      const { data } = await sb.from("platform_config").select("value").eq("key", "cloudflare_api_token").maybeSingle();
+      if (data?.value) apiToken = data.value;
+    }
 
     if (!accountId || !apiToken) {
       return new Response(
@@ -96,7 +109,24 @@ serve(async (req: Request) => {
 
     // ── Deploy worker script ──
     const workerCode = await getWorkerCode();
-    const workerSecret = Deno.env.get("CLOUDFLARE_WORKER_SECRET") || crypto.randomUUID();
+    
+    // Check if worker secret is already in platform_config first to reuse it
+    let workerSecret = Deno.env.get("CLOUDFLARE_WORKER_SECRET") || "";
+    if (!workerSecret) {
+      const { data: dbSecret } = await sb.from("platform_config").select("value").eq("key", "cloudflare_worker_secret").maybeSingle();
+      if (dbSecret?.value) {
+        workerSecret = dbSecret.value;
+      } else {
+        workerSecret = crypto.randomUUID();
+        // Save to platform_config
+        await sb.from("platform_config").upsert({
+          key: "cloudflare_worker_secret",
+          value: workerSecret,
+          description: "Auto-generated Cloudflare deploy worker secret",
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "key" });
+      }
+    }
 
     const deployResult = await cf.deployWorkerScript(SCRIPT_NAME, workerCode, {
       main_module: "index.js",
@@ -291,8 +321,9 @@ async function getWorkerCode(): Promise<string> {
     if (url.pathname === "/api/deploy" && request.method === "POST") {
       const body = await request.json();
       for (const f of body.files || []) {
-        const p = f.name.startsWith("/") ? f.name : \`/\${f.name}\`;
-        await env.KV.put(\`app:\${body.slug}:\${p}\`, f.content);
+        const p = f.name.startsWith("/") ? f.name : `/\${f.name}`;
+        const val = typeof f.content === "string" ? f.content : JSON.stringify(f.content);
+        await env.KV.put(`app:\${body.slug}:\${p}`, val);
       }
       return new Response(JSON.stringify({ success: true, url: \`https://\${body.slug}.crealityapp.com\` }), { headers: { ...CORS, "Content-Type": "application/json" } });
     }

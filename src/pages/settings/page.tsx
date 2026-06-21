@@ -212,15 +212,13 @@ function PlanBillingTab() {
           status: planData.status as UserPlan["status"],
           creditsRemaining: planData.credits_remaining as number,
           creditsMonthly: planData.credits_monthly as number,
-          buildsUsedThisMonth: planData.builds_used_this_month as number,
-          buildsLimitMonthly: planData.builds_limit_monthly as number,
           projectsLimit: planData.projects_limit as number,
         });
         setHasStripeSub(!!planData.stripe_subscription_id);
       } else {
         setPlan({
           tier: "free", status: "active", creditsRemaining: 20, creditsMonthly: 20,
-          buildsUsedThisMonth: 0, buildsLimitMonthly: 20, projectsLimit: 3,
+          projectsLimit: 3,
         });
       }
       setProjectCount(projectCountResult);
@@ -281,7 +279,6 @@ function PlanBillingTab() {
   }
 
   const tier = plan?.tier || "free";
-  const usagePercent = plan ? Math.round((plan.buildsUsedThisMonth / Math.max(plan.buildsLimitMonthly, 1)) * 100) : 0;
   const creditPercent = plan ? Math.round(((plan.creditsMonthly - plan.creditsRemaining) / Math.max(plan.creditsMonthly, 1)) * 100) : 0;
 
   const upgradePlans = [

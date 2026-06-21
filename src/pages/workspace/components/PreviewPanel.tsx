@@ -8,6 +8,7 @@ interface PreviewPanelProps {
   fileName?: string;
   onCodeUpdate?: (code: string) => void;
   sandboxHtml?: string | null;
+  projectSlug?: string;
 }
 
 type DeviceMode = "desktop" | "tablet" | "mobile";
@@ -100,14 +101,17 @@ function isValidHtmlPreview(code: string | null): boolean {
   return hasDoctype || hasHtmlTag || (hasScriptOrStyle && hasDiv);
 }
 
-export default function PreviewPanel({ isBuilding, generatedCode, isViewingVersion, isExtensionFile, fileName, onCodeUpdate, sandboxHtml }: PreviewPanelProps) {
+export default function PreviewPanel({ isBuilding, generatedCode, isViewingVersion, isExtensionFile, fileName, onCodeUpdate, sandboxHtml, projectSlug }: PreviewPanelProps) {
   const isExt = isExtensionFile ?? (generatedCode !== null && !generatedCode.trimStart().startsWith("<!") && !generatedCode.trimStart().startsWith("<html"));
   const isNonHtmlCode = generatedCode !== null && !isExt && !isValidHtmlPreview(generatedCode);
   const hasAnyCode = !!generatedCode || !!sandboxHtml;
   const [device, setDevice] = useState<DeviceMode>("desktop");
   const [viewMode, setViewMode] = useState<ViewMode>(hasAnyCode ? "preview" : "code");
   const [refreshKey, setRefreshKey] = useState(0);
-  const iframeUrl = useBlobUrl(viewMode === "preview" && sandboxHtml ? sandboxHtml : (!isExt && !isNonHtmlCode ? generatedCode : null));
+  const [useLiveUrl, setUseLiveUrl] = useState(false);
+  const blobUrl = useBlobUrl(viewMode === "preview" && sandboxHtml ? sandboxHtml : (!isExt && !isNonHtmlCode ? generatedCode : null));
+  const liveUrl = (projectSlug && !isViewingVersion) ? `https://${projectSlug}.crealityapp.com` : "";
+  const iframeUrl = useLiveUrl ? liveUrl : blobUrl;
 
   useEffect(() => {
     if (hasAnyCode && !isExt && !isNonHtmlCode) {
@@ -130,15 +134,26 @@ export default function PreviewPanel({ isBuilding, generatedCode, isViewingVersi
       {isExt && generatedCode && !sandboxHtml && <div className="flex items-center gap-1.5 md:gap-2 text-[10px] md:text-xs text-foreground-600 bg-primary-500/10 border border-primary-500/20 rounded-lg px-2 md:px-2.5 py-1 flex-shrink-0"><i className="ri-puzzle-line text-primary-600 text-[10px] md:text-xs" /><span className="text-primary-700 font-medium whitespace-nowrap hidden sm:inline">Code view</span></div>}
       {isViewingVersion && <div className="flex items-center gap-1 md:gap-1.5 bg-accent-500/10 border border-accent-500/20 rounded-lg px-2 md:px-2.5 py-1 md:py-1.5 flex-shrink-0"><i className="ri-history-line text-accent-400 text-[10px]" /><span className="text-[10px] text-accent-400 whitespace-nowrap hidden sm:inline">Version preview</span></div>}
       <div className="flex-1" />
+      {viewMode === "preview" && canPreview && liveUrl && (
+        <div className="flex items-center gap-0.5 bg-background-200/40 border border-background-300/60 rounded-lg p-0.5 flex-shrink-0 mr-1">
+          <button onClick={() => setUseLiveUrl(false)} className={`px-2 h-6 rounded-md text-[10px] md:text-xs transition-colors cursor-pointer whitespace-nowrap ${!useLiveUrl ? "bg-foreground-400/15 text-foreground-800 font-semibold" : "text-foreground-600 hover:text-foreground-800"}`} title="Instant local preview">Local</button>
+          <button onClick={() => setUseLiveUrl(true)} className={`px-2 h-6 rounded-md text-[10px] md:text-xs transition-colors cursor-pointer whitespace-nowrap ${useLiveUrl ? "bg-foreground-400/15 text-foreground-800 font-semibold" : "text-foreground-600 hover:text-foreground-800"}`} title="Live Cloudflare preview">Live</button>
+        </div>
+      )}
+      {viewMode === "preview" && canPreview && liveUrl && (
+        <a href={liveUrl} target="_blank" rel="noopener noreferrer" className="w-6 md:w-7 h-6 md:h-7 flex items-center justify-center rounded-lg hover:bg-background-200/60 transition-colors cursor-pointer text-foreground-500 hover:text-foreground-700 flex-shrink-0 mr-1" title="Open live site in new tab">
+          <i className="ri-external-link-line text-xs md:text-sm" />
+        </a>
+      )}
       {viewMode === "preview" && <div className="flex items-center gap-0.5 bg-background-200/40 border border-background-300/60 rounded-lg p-0.5 flex-shrink-0">{(Object.entries(deviceSizes) as [DeviceMode, typeof deviceSizes[DeviceMode]][]).map(([mode, cfg]) => <button key={mode} onClick={() => setDevice(mode)} title={cfg.label} className={`w-6 md:w-7 h-6 md:h-7 flex items-center justify-center rounded-md transition-colors cursor-pointer ${device === mode ? "bg-foreground-400/15 text-foreground-800" : "text-foreground-600 hover:text-foreground-800"}`}><i className={`${cfg.icon} text-[10px] md:text-xs`} /></button>)}</div>}
-      <button onClick={handleExport} disabled={!generatedCode} title="Download HTML" className="w-6 md:w-7 h-6 md:h-7 flex items-center justify-center rounded-lg hover:bg-background-200/60 transition-colors cursor-pointer text-foreground-500 hover:text-foreground-700 disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0"><i className="ri-download-line text-xs md:text-sm" /></button>
-      <button onClick={() => setRefreshKey(k => k + 1)} className="w-6 md:w-7 h-6 md:h-7 flex items-center justify-center rounded-lg hover:bg-background-200/60 transition-colors cursor-pointer text-foreground-500 hover:text-foreground-700 flex-shrink-0" title="Refresh preview"><i className="ri-refresh-line text-xs md:text-sm" /></button></div>
+      <button onClick={handleExport} disabled={!generatedCode} title="Download HTML" className="w-6 md:w-7 h-6 md:h-7 flex items-center justify-center rounded-lg hover:bg-background-200/60 transition-colors cursor-pointer text-foreground-500 hover:text-foreground-700 disabled:opacity-30 disabled:cursor-not-allowed flex-shrink-0 ml-1"><i className="ri-download-line text-xs md:text-sm" /></button>
+      <button onClick={() => setRefreshKey(k => k + 1)} className="w-6 md:w-7 h-6 md:h-7 flex items-center justify-center rounded-lg hover:bg-background-200/60 transition-colors cursor-pointer text-foreground-500 hover:text-foreground-700 flex-shrink-0 ml-1" title="Refresh preview"><i className="ri-refresh-line text-xs md:text-sm" /></button></div>
 
     {viewMode === "preview" && canPreview ? (
       <div className="flex-1 overflow-auto flex items-start justify-center p-4 min-h-0">
         <div className="h-full rounded-xl overflow-hidden border border-background-300/60 relative transition-all duration-300 bg-background-950" style={{ width: deviceSizes[device].w, minHeight: "500px" }}>
           {isBuilding && <div className="absolute inset-0 z-10 bg-background-950/70 backdrop-blur-sm flex flex-col items-center justify-center gap-3"><div className="w-8 h-8 border-2 border-background-400/60 border-t-foreground-300 rounded-full animate-spin" /><p className="text-xs text-foreground-400 font-medium">Building your app...</p></div>}
-          <iframe key={refreshKey} src={iframeUrl} className="w-full h-full border-0" title="App Preview" sandbox="allow-scripts allow-same-origin" />
+          <iframe key={refreshKey} src={iframeUrl} className="w-full h-full border-0" title="App Preview" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" />
         </div>
       </div>
     ) : (

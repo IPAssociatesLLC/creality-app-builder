@@ -955,7 +955,7 @@ function PlansTab() {
               ].map((field) => (
                 <div key={field.key} className="flex flex-col gap-1.5">
                   <label className="text-[10px] font-bold text-foreground-500 uppercase tracking-wider">{field.label}</label>
-                  <input type={field.type} value={(editingPlan as Record<string, number | string>)[field.key] as number} onChange={(e) => setEditingPlan({ ...editingPlan, [field.key]: parseInt(e.target.value) || 0 })} className="bg-background-100 border border-background-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
+                  <input type={field.type} value={(editingPlan as any)[field.key]} onChange={(e) => setEditingPlan({ ...editingPlan, [field.key]: parseInt(e.target.value) || 0 })} className="bg-background-100 border border-background-200 rounded-xl px-3 py-2.5 text-sm outline-none" />
                 </div>
               ))}
               <div className="flex flex-col gap-1.5">
@@ -976,7 +976,15 @@ function PlansTab() {
 
 // ── Settings Tab ──
 function SettingsTab() {
-  const [settings, setSettings] = useState({ platformName: "CreAIlity", maintenanceMode: false, signupsEnabled: true, defaultModel: "gpt-4o", stripePublishableKey: "" });
+  const [settings, setSettings] = useState({
+    platformName: "CreAIlity",
+    maintenanceMode: false,
+    signupsEnabled: true,
+    defaultModel: "gpt-4o",
+    stripePublishableKey: "",
+    cloudflareAccountId: "",
+    cloudflareApiToken: "",
+  });
   const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -989,6 +997,8 @@ function SettingsTab() {
         signupsEnabled: map.signups_enabled !== "false",
         defaultModel: map.default_model || "gpt-4o",
         stripePublishableKey: map.stripe_publishable_key || "",
+        cloudflareAccountId: map.cloudflare_account_id || "",
+        cloudflareApiToken: map.cloudflare_api_token || "",
       });
     });
   }, []);
@@ -1085,6 +1095,32 @@ function SettingsTab() {
               <div className="flex items-center gap-2">
                 <input type="text" readOnly value="https://qyyfygcflzyfucypmfeu.supabase.co/functions/v1/stripe-webhook" className="bg-background-100 border border-background-200 rounded-xl px-3 py-2 text-xs text-foreground-600 outline-none w-full cursor-text select-all" />
                 <button onClick={() => { navigator.clipboard.writeText("https://qyyfygcflzyfucypmfeu.supabase.co/functions/v1/stripe-webhook"); setMsg("Copied Webhook URL!"); setTimeout(() => setMsg(null), 2000); }} className="text-xs font-semibold bg-background-200 text-foreground-700 px-3 py-2 rounded-xl hover:bg-background-300 transition-colors cursor-pointer whitespace-nowrap"><i className="ri-file-copy-line mr-1" />Copy</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        {/* Cloudflare Sandbox Settings */}
+        <div className="bg-background-50 border border-background-200/80 rounded-2xl p-5">
+          <div className="flex flex-col gap-4">
+            <h3 className="text-xs font-bold text-foreground-800 uppercase tracking-wider">Cloudflare Sandbox Settings</h3>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-bold text-foreground-800">Cloudflare Account ID</p>
+                <p className="text-xs text-foreground-500 mt-0.5">Found in Cloudflare dashboard URL or settings</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="text" value={settings.cloudflareAccountId} onChange={(e) => setSettings({ ...settings, cloudflareAccountId: e.target.value })} className="bg-background-100 border border-background-200 rounded-xl px-3 py-2 text-sm text-foreground-800 outline-none w-40 sm:w-60" placeholder="e.g. 1a2b3c..." />
+                <button onClick={() => handleSave("cloudflare_account_id", settings.cloudflareAccountId)} className="text-xs font-semibold bg-accent-500 text-background-50 px-3 py-2 rounded-xl hover:bg-accent-500/90 transition-colors cursor-pointer whitespace-nowrap">Save</button>
+              </div>
+            </div>
+            <div className="pt-3 border-t border-background-200 flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-bold text-foreground-800">Cloudflare API Token</p>
+                <p className="text-xs text-foreground-500 mt-0.5">Token with Workers and KV Edit permissions</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="password" value={settings.cloudflareApiToken} onChange={(e) => setSettings({ ...settings, cloudflareApiToken: e.target.value })} className="bg-background-100 border border-background-200 rounded-xl px-3 py-2 text-sm text-foreground-800 outline-none w-40 sm:w-60" placeholder="••••••••••••••••" />
+                <button onClick={() => handleSave("cloudflare_api_token", settings.cloudflareApiToken)} className="text-xs font-semibold bg-accent-500 text-background-50 px-3 py-2 rounded-xl hover:bg-accent-500/90 transition-colors cursor-pointer whitespace-nowrap">Save</button>
               </div>
             </div>
           </div>

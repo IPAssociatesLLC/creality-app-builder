@@ -11,18 +11,21 @@ export default function PreviewPage() {
 
   useEffect(() => {
     if (!id) { setProject(null); return; }
-    const local = loadProject(id);
-    if (local) { setProject(local); return; }
-    supabase.from("projects").select("*").eq("id", id).maybeSingle().then(({ data, error }) => {
-      if (error || !data) { setProject(null); return; }
-      const p: Project = {
-        id: data.id, name: data.name,
-        createdAt: new Date(data.created_at).getTime(), updatedAt: new Date(data.updated_at).getTime(),
-        generatedCode: data.generated_code, conversationHistory: data.conversation_history || [],
-        previewSlug: data.preview_slug || data.id, customDomain: data.custom_domain || undefined,
-        versions: [], activeVersionId: null, importedFiles: (data.imported_files as ImportedFile[]) || [],
-      };
-      setProject(p);
+    loadProject(id).then((local) => {
+      if (local) { setProject(local); return; }
+      supabase.from("projects").select("*").eq("id", id).maybeSingle().then(({ data, error }) => {
+        if (error || !data) { setProject(null); return; }
+        const p: Project = {
+          id: data.id, name: data.name,
+          createdAt: new Date(data.created_at).getTime(), updatedAt: new Date(data.updated_at).getTime(),
+          generatedCode: data.generated_code, conversationHistory: data.conversation_history || [],
+          previewSlug: data.preview_slug || data.id, customDomain: data.custom_domain || undefined,
+          versions: [], activeVersionId: null, importedFiles: (data.imported_files as ImportedFile[]) || [],
+        };
+        setProject(p);
+      });
+    }).catch(() => {
+      setProject(null);
     });
   }, [id]);
 
